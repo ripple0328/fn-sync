@@ -1,5 +1,5 @@
 pkgname=fn-sync
-pkgver=0.10.0
+pkgver=0.10.1
 pkgrel=1
 pkgdesc="Safe fnOS WebDAV sync client with Omarchy integration"
 arch=('any')

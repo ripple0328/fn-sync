@@ -83,11 +83,10 @@ class PluginContractTests(unittest.TestCase):
             control.index('[ -x "$HOME/.local/bin/fn-sync" ]'),
         )
         self.assertIn('install-dependencies)', control)
+        self.assertNotIn('command -v pkexec', control)
+        self.assertNotIn('pkexec pacman', control)
         self.assertIn(
-            'pkexec pacman -S --needed --noconfirm python', control
-        )
-        self.assertNotIn(
-            'pkexec pacman -S --needed --noconfirm python rclone', control
+            'install the published standalone plugin instead', control
         )
         self.assertIn('managed_runtime_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fn-sync/runtime"', control)
         self.assertIn("rclone_release=\"1.75.0\"", control)

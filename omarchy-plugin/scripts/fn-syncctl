@@ -226,11 +226,8 @@ case "${1:-status}" in
   install-dependencies)
     language="${2:-system}"
     if [ "$client_mode" = python ] && ! command -v python3 >/dev/null 2>&1; then
-      command -v pkexec >/dev/null 2>&1 || {
-        echo "pkexec is required to install FN Sync's Python runtime" >&2
-        exit 1
-      }
-      FNSYNC_LANGUAGE="$language" pkexec pacman -S --needed --noconfirm python
+      echo "This source-checkout fallback needs Python; install the published standalone plugin instead" >&2
+      exit 1
     fi
     if [ -z "$rclone_binary" ]; then
       install_managed_rclone

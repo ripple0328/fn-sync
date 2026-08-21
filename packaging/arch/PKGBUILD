@@ -1,5 +1,5 @@
 pkgname=fn-sync
-pkgver=0.10.0
+pkgver=0.10.1
 pkgrel=1
 pkgdesc="Safe fnOS WebDAV sync client with Omarchy integration"
 arch=('any')
@@ -12,7 +12,7 @@ conflicts=('fnsync')
 replaces=('fnsync')
 install=fn-sync.install
 source=("$pkgname-$pkgver.tar.gz")
-sha256sums=('7300debf61bbf0f1595c3c4e42ff543a4e85b1ff86a8fda380cf4ead41aa4dd0')
+sha256sums=('364077d9f91e25be3bb1d91da0f70d069c4e3d58611c495234273e99e11a3412')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
