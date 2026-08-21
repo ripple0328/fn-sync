@@ -1,7 +1,10 @@
 import importlib.util
 import ipaddress
 import json
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -66,10 +69,57 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn('String(task.status.error_code || "") === "access-marker"', panel)
         self.assertIn(": false;", panel)
 
-    def test_control_wrapper_prefers_the_user_install(self):
+    def test_control_wrapper_prefers_the_bundled_runtime(self):
         control = (ROOT / "scripts" / "fn-syncctl").read_text(encoding="utf-8")
-        self.assertIn('${FNSYNC_BIN:-$HOME/.local/bin/fn-sync}', control)
+        self.assertIn('bundled_client="$plugin_dir/runtime/fnsync.py"', control)
+        self.assertLess(
+            control.index('[ -f "$bundled_client" ]'),
+            control.index('[ -x "$HOME/.local/bin/fn-sync" ]'),
+        )
+        self.assertIn('install-dependencies)', control)
+        self.assertIn('pkexec pacman -S --needed --noconfirm python rclone gjs gtk4 libsecret libnotify', control)
+        self.assertIn('systemctl --user enable --now fnsync.service', control)
         self.assertIn('FNSYNC_LANGUAGE="$language"', control)
+
+    def test_standalone_plugin_contains_the_client_runtime(self):
+        for relative in (
+            "runtime/fnsync.py",
+            "runtime/ui/app.js",
+            "runtime/fnsync.service",
+        ):
+            self.assertTrue((ROOT / relative).is_file(), relative)
+        self.assertEqual(
+            (ROOT / "runtime" / "fnsync.py").read_bytes(),
+            (ROOT.parent / "src" / "fnsync.py").read_bytes(),
+        )
+        self.assertEqual(
+            (ROOT / "runtime" / "ui" / "app.js").read_bytes(),
+            (ROOT.parent / "ui" / "app.js").read_bytes(),
+        )
+
+    def test_clean_system_reports_integrated_setup_instead_of_missing_client(self):
+        with tempfile.TemporaryDirectory(prefix="fn-sync-plugin-path-") as temp:
+            fake_bin = Path(temp) / "bin"
+            fake_bin.mkdir()
+            os.symlink("/usr/bin/dirname", fake_bin / "dirname")
+            env = os.environ.copy()
+            env.update({"HOME": str(Path(temp) / "home"), "PATH": str(fake_bin)})
+            result = subprocess.run(
+                [str(ROOT / "scripts" / "fn-syncctl"), "status", "en"],
+                text=True,
+                capture_output=True,
+                env=env,
+                timeout=10,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["installed"])
+            self.assertFalse(payload["ready"])
+            self.assertEqual(payload["distribution"], "plugin")
+            self.assertEqual(
+                payload["missing_dependencies"], "python,rclone,gjs,gtk4"
+            )
 
     def test_large_private_route_is_bounded_to_source_subnet(self):
         routes = [{"dst": "10.0.0.0/8", "prefsrc": "10.23.45.67"}]

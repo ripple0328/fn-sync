@@ -21,45 +21,47 @@ private LAN. A responding WebDAV endpoint fills the address automatically;
 an fnOS host without WebDAV is labeled clearly and can open the management UI.
 The form still requires a successful login and folder test.
 
-This plugin deliberately contains no WebDAV implementation and no stored
-credentials. The `fn-sync` AUR package supplies the controller, GTK client,
-background service and a bundled copy of this panel.
+The plugin contains its own FN Sync controller, GTK client, and background
+service unit. Transfers run out of process through rclone; no WebDAV password
+is stored in QML or plugin settings.
 
 ## Installation
 
-Install the AUR package and its bundled plugin in one command:
+Install it like a regular Omarchy plugin:
 
 ```bash
-omarchy pkg aur add fn-sync && fn-sync-omarchy-setup
+omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-Alternatively, keep the plugin as a git-managed Omarchy checkout:
+This is the only FN Sync installation command required on Omarchy. The first
+open shows a one-time setup card only when signed Arch runtime components are
+missing; its button uses the system authentication dialog and completes setup
+without an AUR package or a second terminal command.
 
-```bash
-omarchy pkg aur add fn-sync && omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
-```
-
-Use only one method. Update a bundled installation with
-`fn-sync-omarchy-setup --update`; update a git-managed installation with:
+Update the Git-managed installation with:
 
 ```bash
 omarchy plugin update community.fnos-sync --yes
 ```
 
+The optional `fn-sync` Arch/AUR package is for non-Omarchy and system-wide
+installations. It is not a dependency of this plugin.
+
 ## Removal
 
-Remove the Omarchy panel first. If the system client is no longer needed,
-stop its user service before removing the package:
+Stop the plugin-owned background service, then remove the plugin:
 
 ```bash
-omarchy plugin remove community.fnos-sync --yes
 systemctl --user disable --now fnsync.service
-omarchy pkg drop fn-sync
+rm -f ~/.config/systemd/user/fnsync.service
+systemctl --user daemon-reload
+omarchy plugin remove community.fnos-sync --yes
 ```
 
-Removing the plugin or package does not delete either synchronized folder.
-The user's task configuration and logs remain under the normal XDG config and
-state directories unless the user removes them separately.
+Removing the plugin does not delete either synchronized folder. The user's task
+configuration and logs remain under the normal XDG config and state directories
+unless the user removes them separately. Shared Arch runtime components are not
+removed automatically.
 
 The plugin uses Omarchy's `Color`, `Style`, `BorderSurface`, `KeyboardPanel`,
 `Button`, `TextField`, `Dropdown`, and `Toggle` components so it follows the

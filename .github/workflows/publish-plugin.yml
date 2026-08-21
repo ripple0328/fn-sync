@@ -24,6 +24,7 @@ jobs:
           sudo apt-get install --yes jq shellcheck qt6-declarative-dev-tools
       - name: Validate the plugin tree
         run: |
+          ./scripts/sync-plugin-runtime.sh
           curl --fail --silent --show-error --location \
             https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
             --output /tmp/omarchy-plugin-validate
@@ -46,6 +47,8 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add --force omarchy-plugin/runtime
+          git commit --message "Bundle FN Sync runtime for plugin release"
           git subtree split --prefix=omarchy-plugin --branch=plugin-release
           git remote add plugin git@github.com:ripple0328/omarchy-fn-sync.git
           git push plugin plugin-release:main

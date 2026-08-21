@@ -12,6 +12,8 @@ packaging/arch/src/
 packaging/arch/pkg/
 packaging/arch/*.tar.gz
 packaging/arch/*.pkg.tar.zst
+# Generated for standalone plugin archives and the published plugin subtree.
+omarchy-plugin/runtime/
 # Local design audits contain real desktop paths and NAS labels. Public README
 # screenshots are privacy-safe crops under docs/screenshots/ instead.
 docs/audits/

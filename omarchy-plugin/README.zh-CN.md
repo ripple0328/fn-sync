@@ -18,42 +18,43 @@ FN sync 是一个跟随主题的 Omarchy 状态栏组件和管理面板，用于
 直连的私有局域网；有响应的 WebDAV 端点可以自动填写地址。发现 fnOS 但没有
 WebDAV 时，界面会明确标注并可打开管理页面。最终仍须成功完成登录和文件夹测试。
 
-插件本身不实现 WebDAV，也不保存凭据。`fn-sync` AUR 软件包提供控制器、GTK
-客户端、后台服务以及本面板的内置副本。
+插件内置 FN Sync 控制器、GTK 客户端和后台服务单元。文件传输在独立的 rclone
+进程中运行；WebDAV 密码不会保存在 QML 或插件设置中。
 
 ## 安装
 
-使用一条命令安装 AUR 软件包和内置插件：
+像普通 Omarchy 插件一样安装：
 
 ```bash
-omarchy pkg aur add fn-sync && fn-sync-omarchy-setup
+omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-也可以让 Omarchy 通过 Git 管理插件：
+这是 Omarchy 上安装飞牛所需的唯一命令。只有缺少已签名的 Arch 运行组件时，首次
+打开才会显示一次性设置卡；点击按钮后通过系统认证完成安装，不需要 AUR 软件包或
+第二条终端命令。
 
-```bash
-omarchy pkg aur add fn-sync && omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
-```
-
-两种方式只选一种。内置安装使用 `fn-sync-omarchy-setup --update` 更新；Git
-管理的安装使用：
+使用下面的命令更新 Git 管理的插件：
 
 ```bash
 omarchy plugin update community.fnos-sync --yes
 ```
 
+可选的 `fn-sync` Arch/AUR 软件包用于非 Omarchy 或系统级安装，不是本插件的
+依赖。
+
 ## 卸载
 
-先移除 Omarchy 面板。如果不再需要系统客户端，请先停止用户服务，再移除软件包：
+先停止插件使用的后台服务，再移除插件：
 
 ```bash
-omarchy plugin remove community.fnos-sync --yes
 systemctl --user disable --now fnsync.service
-omarchy pkg drop fn-sync
+rm -f ~/.config/systemd/user/fnsync.service
+systemctl --user daemon-reload
+omarchy plugin remove community.fnos-sync --yes
 ```
 
-移除插件或软件包不会删除任一同步文件夹。用户的任务配置与日志仍保留在标准的
-XDG 配置和状态目录中，除非用户另行删除。
+移除插件不会删除任一同步文件夹。用户的任务配置与日志仍保留在标准的 XDG 配置
+和状态目录中，除非用户另行删除。共享的 Arch 运行组件不会自动移除。
 
 插件使用 Omarchy 的 `Color`、`Style`、`BorderSurface`、
 `KeyboardPanel`、`Button`、`TextField`、`Dropdown` 和 `Toggle`

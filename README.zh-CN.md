@@ -15,7 +15,7 @@
 应用显示名为 **FN sync**；系统界面语言为中文时显示为 **飞牛**。包名、命令和
 内部路径仍使用 `fn-sync`，以保持安装与脚本兼容。
 
-> 当前版本为 `0.8.2`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
+> 当前版本为 `0.9.0`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
 > 验证。Omarchy 面板只保留“任务 / 设置”两个主导航；连接等子页使用安静、跟随
 > 主题的面包屑返回导航，每个任务卡也只显示一次同步状态。首次试用仍建议从一个
 > 新建的小目录开始。
@@ -33,10 +33,11 @@
 | `fn-sync` 控制器 + rclone | WebDAV 传输、任务状态、冲突与删除保护 | 否 |
 | systemd 用户服务 | 定时后台同步 | 否 |
 | GTK 4/GJS 客户端 | 连接、任务、首次同步引导、暂停与立即同步 | 否 |
-| `community.fnos-sync` 插件 | Omarchy 原生管理面板与状态栏入口 | 是，可选 |
+| `community.fnos-sync` 插件 | Omarchy 原生面板，以及内置的控制器和 GTK 客户端 | 是，完整自包含 |
 
-Omarchy 插件只是薄适配层。它不保存 WebDAV 密码，也不在长期运行的
-`omarchy-shell` 进程内实现文件传输。
+Omarchy 插件内置控制器与 GTK 客户端，因此可以像普通插件一样安装。文件传输仍在
+独立的 Python/rclone 进程中运行，不会在长期运行的 `omarchy-shell` 进程内执行；
+插件也不会保存 WebDAV 密码。
 
 插件会在加载时、每次打开面板时、操作完成后以及后台定时自动刷新状态。默认
 间隔为 30 秒，可通过插件的 `refreshIntervalSec` 设置调整，因此面板不需要
@@ -76,23 +77,26 @@ Omarchy 插件只是薄适配层。它不保存 WebDAV 密码，也不在长期�
 
 ## 在 Omarchy 上安装
 
-AUR 软件包发布后，下面一行会同时安装系统客户端、复制软件包内置的 Omarchy
-插件、启动用户服务并启用状态栏组件：
+使用 Omarchy 的普通命令安装并启用 Git 管理的插件：
 
 ```bash
-omarchy pkg aur add fn-sync && fn-sync-omarchy-setup
+omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-pacman 以 root 身份安装系统文件，而 Omarchy 插件属于当前桌面用户，因此
-PKGBUILD 不会冒充用户写入 `~/.config`。`fn-sync-omarchy-setup` 负责用户级
-安装阶段。
+这是 Omarchy 用户安装飞牛所需的唯一命令。插件仓库已经包含控制器、GTK 客户端
+和后台服务单元。首次打开时，如果缺少 Arch 运行组件，设置卡会通过系统认证对话框
+提供安装；无需安装 AUR 软件包，也无需再运行第二条命令。该授权会明确显示，因为
+Omarchy 的插件安装器按设计不会执行安装 hook 或请求提权。
 
-如果希望由 Omarchy 直接从 Git 管理插件，请改用下面的方式，不要同时安装软件包
-内置副本：
+之后像其他 Git 管理的 Omarchy 插件一样更新：
 
 ```bash
-omarchy pkg aur add fn-sync && omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
+omarchy plugin update community.fnos-sync --yes
 ```
+
+`fn-sync` Arch/AUR 软件包仍可作为非 Omarchy 桌面或纯命令行安装的可选系统级
+发行方式，但不再是 Omarchy 插件的依赖。即使系统已安装该软件包，Git 插件也会
+优先使用与插件同版本的内置运行组件，避免插件和客户端更新不同步。
 
 从源码构建 pacman 包、独立插件包和便携一键安装包：
 
@@ -110,9 +114,9 @@ cd fn-sync
 
 构建产物位于 `dist/`：
 
-- `fn-sync-0.8.2-1-any.pkg.tar.zst`：Arch/pacman 系统包。
-- `fn-sync-omarchy-plugin-0.8.2.tar.gz`：独立 Omarchy 插件归档。
-- `fn-sync-omarchy-bundle-0.8.2.tar.gz`：包含前两者和安装器的便携包。
+- `fn-sync-0.9.0-1-any.pkg.tar.zst`：Arch/pacman 系统包。
+- `fn-sync-omarchy-plugin-0.9.0.tar.gz`：自包含 Omarchy 插件归档。
+- `fn-sync-omarchy-bundle-0.9.0.tar.gz`：包含前两者和安装器的便携包。
 
 安装后，状态栏右侧会显示飞牛同步官方双环标记，并打开跟随当前 Omarchy 主题的
 统一面板。标记的前景色、强调色和错误色均实时绑定系统主题。面板只有“任务 /

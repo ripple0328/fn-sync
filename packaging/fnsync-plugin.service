@@ -1,0 +1,15 @@
+[Unit]
+Description=FN Sync background service for the Omarchy plugin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.config/omarchy/plugins/community.fnos-sync/scripts/fn-syncctl daemon
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

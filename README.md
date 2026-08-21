@@ -17,7 +17,7 @@ The application is displayed as **FN sync**, or **飞牛** when the system
 interface language is Chinese. The package name, command, and internal paths
 remain `fn-sync` for installation and script compatibility.
 
-> The current version is `0.8.2`. Discovery, authorization, folder browsing,
+> The current version is `0.9.0`. Discovery, authorization, folder browsing,
 > and large transfers have been validated against a real fnOS NAS. The Omarchy
 > panel has only two top-level destinations, **Tasks** and **Settings**.
 > Connection pages use quiet, theme-aware breadcrumb navigation, and each task
@@ -37,10 +37,12 @@ remain `fn-sync` for installation and script compatibility.
 | `fn-sync` controller + rclone | WebDAV transfer, task state, conflict handling, and deletion safeguards | No |
 | systemd user service | Scheduled background synchronization | No |
 | GTK 4/GJS client | Connections, tasks, first-sync guidance, pause, and sync-now actions | No |
-| `community.fnos-sync` plugin | Native Omarchy management panel and status-bar entry | Yes; optional |
+| `community.fnos-sync` plugin | Native Omarchy panel plus a bundled copy of the controller and GTK client | Yes; self-contained |
 
-The Omarchy plugin is a thin adapter. It never stores WebDAV passwords and does
-not implement file transfer inside the long-running `omarchy-shell` process.
+The Omarchy plugin includes the controller and GTK client so it can be installed
+like a regular plugin. File transfers still run in a separate Python/rclone
+process, never inside the long-running `omarchy-shell` process, and the plugin
+never stores WebDAV passwords.
 
 Plugin status refreshes when the widget loads, whenever the panel opens, after
 an action completes, and on a background timer. The default interval is 30
@@ -91,25 +93,30 @@ the panel does not need a manual refresh button.
 
 ## Install on Omarchy
 
-After the AUR package is published, this command installs the system client,
-copies the bundled Omarchy plugin, starts the user service, and enables the
-status-bar widget:
+Install and enable the Git-managed plugin with the normal Omarchy command:
 
 ```bash
-omarchy pkg aur add fn-sync && fn-sync-omarchy-setup
+omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-pacman installs system files as root, while an Omarchy plugin belongs to the
-current desktop user. The PKGBUILD therefore never impersonates the user to
-write under `~/.config`; `fn-sync-omarchy-setup` performs that user-level
-step.
+That is the only FN Sync installation command an Omarchy user needs. The plugin
+repository contains the controller, GTK client, and background-service unit.
+On first open, a setup card offers to install any missing signed Arch runtime
+components through the system authentication dialog. It does not install an
+AUR package or ask the user to run a second command. The setup is explicit
+because Omarchy's plugin installer deliberately never executes install hooks or
+requests elevated privileges.
 
-To let Omarchy manage the plugin directly from Git instead, use this alternative
-and do not also install the bundled copy:
+Update it through Omarchy like any other Git-managed plugin:
 
 ```bash
-omarchy pkg aur add fn-sync && omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
+omarchy plugin update community.fnos-sync --yes
 ```
+
+The `fn-sync` Arch/AUR package remains an optional system-wide distribution for
+non-Omarchy desktops and command-line-only installations. It is not a dependency
+of the Omarchy plugin. If it is already installed, the Git-managed plugin uses
+its own matching bundled runtime so plugin and client updates cannot drift.
 
 To build the pacman package, standalone plugin archive, and portable bundle
 from source:
@@ -129,9 +136,9 @@ only when invoking pacman:
 
 Artifacts are written to `dist/`:
 
-- `fn-sync-0.8.2-1-any.pkg.tar.zst`: Arch/pacman system package.
-- `fn-sync-omarchy-plugin-0.8.2.tar.gz`: standalone Omarchy plugin.
-- `fn-sync-omarchy-bundle-0.8.2.tar.gz`: portable bundle containing both
+- `fn-sync-0.9.0-1-any.pkg.tar.zst`: Arch/pacman system package.
+- `fn-sync-omarchy-plugin-0.9.0.tar.gz`: self-contained Omarchy plugin.
+- `fn-sync-omarchy-bundle-0.9.0.tar.gz`: portable bundle containing both
   packages and the installer.
 
 After installation, the official double-loop FN Sync mark appears on the right

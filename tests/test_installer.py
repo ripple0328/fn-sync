@@ -101,6 +101,9 @@ class InstallerTests(unittest.TestCase):
             "assets/fn-sync-symbolic.png",
             "scripts/fn-syncctl",
             "scripts/fn_sync_discover.py",
+            "runtime/fnsync.py",
+            "runtime/ui/app.js",
+            "runtime/fnsync.service",
         }
         actual = {
             str(path.relative_to(target))

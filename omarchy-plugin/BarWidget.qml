@@ -9,6 +9,9 @@ BarWidget {
     moduleName: "community.fnos-sync"
 
     property bool installed: false
+    property bool runtimeReady: false
+    property string missingDependencies: ""
+    property bool installingDependencies: false
     property var tasks: []
     property var connections: []
     property string statusError: ""
@@ -77,6 +80,9 @@ BarWidget {
         if ("languagePreference" in target)
             target.languagePreference = root.languagePreference;
         target.installed = root.installed;
+        target.runtimeReady = root.runtimeReady;
+        target.missingDependencies = root.missingDependencies;
+        target.installingDependencies = root.installingDependencies;
         target.tasks = root.tasks;
         target.connections = root.connections;
         target.statusError = root.statusError;
@@ -87,11 +93,15 @@ BarWidget {
         try {
             var payload = JSON.parse(String(raw || "{}"));
             installed = payload.installed === true;
+            runtimeReady = payload.ready === true;
+            missingDependencies = String(payload.missing_dependencies || "");
             tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
             connections = Array.isArray(payload.connections) ? payload.connections : [];
             statusError = String(payload.error || "");
         } catch (error) {
             installed = false;
+            runtimeReady = false;
+            missingDependencies = "";
             tasks = [];
             connections = [];
             statusError = l10n("Could not read FN sync status", "无法读取飞牛状态");
@@ -105,7 +115,7 @@ BarWidget {
     }
 
     function syncNow() {
-        if (!installed || syncProcess.running)
+        if (!installed || !runtimeReady || syncProcess.running)
             return;
         syncing = true;
         injectPanel();
@@ -113,7 +123,18 @@ BarWidget {
     }
 
     function openClient() {
+        if (!installed || !runtimeReady)
+            return;
         Quickshell.execDetached([controlPath, "open", languagePreference]);
+    }
+
+    function installDependencies() {
+        if (installingDependencies || dependencyProcess.running)
+            return;
+        installingDependencies = true;
+        statusError = "";
+        injectPanel();
+        dependencyProcess.running = true;
     }
 
     function open() {
@@ -205,6 +226,52 @@ BarWidget {
         }
     }
 
+    Process {
+        id: bootstrapProcess
+        command: [root.controlPath, "bootstrap"]
+        stderr: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                var value = String(text || "").trim();
+                if (value !== "" && value.indexOf("Missing runtime dependencies:") !== 0)
+                    root.statusError = value;
+            }
+        }
+        onExited: function (exitCode) {
+            root.refreshStatus();
+        }
+    }
+
+    Process {
+        id: dependencyProcess
+        command: [root.controlPath, "install-dependencies", root.languagePreference]
+        stderr: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                var value = String(text || "").trim();
+                if (value !== "")
+                    root.statusError = value;
+            }
+        }
+        onExited: function (exitCode) {
+            root.installingDependencies = false;
+            if (exitCode === 0)
+                root.statusError = "";
+            else if (root.statusError === "")
+                root.statusError = root.l10n("Setup did not finish", "设置未完成");
+            root.refreshStatus();
+            root.injectPanel();
+        }
+    }
+
+    Timer {
+        interval: 500
+        running: true
+        repeat: false
+        onTriggered: if (!bootstrapProcess.running)
+            bootstrapProcess.running = true
+    }
+
     Timer {
         interval: root.refreshIntervalSec * 1000
         running: true
@@ -264,7 +331,9 @@ BarWidget {
         fixedWidth: vertical ? -1 : Style.bar.iconSlot
         useActiveColor: false
         tooltipText: !root.installed
-            ? root.l10n("FN sync is not installed", "尚未安装飞牛")
+            ? root.l10n("FN Sync plugin runtime is missing", "飞牛插件运行组件缺失")
+            : !root.runtimeReady
+                ? root.l10n("FN Sync needs one-time setup\nLeft click to finish", "飞牛需要完成一次设置\n左键继续")
             : root.errorCount > 0
                 ? root.l10n(root.errorCount + " sync task(s) need attention", root.errorCount + " 个同步任务需要处理")
                 : root.syncing || root.runningCount > 0

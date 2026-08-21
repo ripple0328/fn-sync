@@ -1,59 +1,160 @@
 #!/bin/sh
 set -eu
 
-installed="${FNSYNC_BIN:-$HOME/.local/bin/fn-sync}"
-if [ ! -x "$installed" ]; then
-  installed=$(command -v fn-sync || true)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+plugin_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+bundled_client="$plugin_dir/runtime/fnsync.py"
+service_source="$plugin_dir/runtime/fnsync.service"
+
+client="${FNSYNC_BIN:-}"
+client_mode="command"
+client_distribution=system
+if [ -n "$client" ] && [ ! -x "$client" ]; then
+  client=""
 fi
-if [ -z "$installed" ]; then
-  installed=$(command -v fnsync || true)
+if [ -z "$client" ] && [ -f "$bundled_client" ]; then
+  client="$bundled_client"
+  client_mode=python
+  client_distribution=plugin
 fi
+if [ -z "$client" ] && [ -x "$HOME/.local/bin/fn-sync" ]; then
+  client="$HOME/.local/bin/fn-sync"
+fi
+if [ -z "$client" ]; then
+  client=$(command -v fn-sync || true)
+fi
+if [ -z "$client" ]; then
+  client=$(command -v fnsync || true)
+fi
+
+run_client() {
+  if [ "$client_mode" = python ]; then
+    python3 "$client" "$@"
+  else
+    "$client" "$@"
+  fi
+}
+
+exec_client() {
+  if [ "$client_mode" = python ]; then
+    exec python3 "$client" "$@"
+  else
+    exec "$client" "$@"
+  fi
+}
+
+missing_dependencies() {
+  missing=""
+  command -v python3 >/dev/null 2>&1 || missing="python"
+  command -v rclone >/dev/null 2>&1 || missing="${missing:+$missing,}rclone"
+  command -v gjs >/dev/null 2>&1 || missing="${missing:+$missing,}gjs"
+  command -v gtk4-launch >/dev/null 2>&1 || missing="${missing:+$missing,}gtk4"
+  printf '%s' "$missing"
+}
+
+ensure_service() {
+  [ -f "$service_source" ] || return 0
+  unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  unit="$unit_dir/fnsync.service"
+  mkdir -p "$unit_dir"
+  if [ ! -f "$unit" ] || ! cmp -s "$service_source" "$unit"; then
+    install -m 0644 "$service_source" "$unit"
+    systemctl --user daemon-reload
+  fi
+  systemctl --user enable --now fnsync.service >/dev/null
+}
+
+bootstrap() {
+  [ -n "$client" ] || {
+    echo "FN Sync runtime is missing" >&2
+    return 2
+  }
+  missing=$(missing_dependencies)
+  [ -z "$missing" ] || {
+    echo "Missing runtime dependencies: $missing" >&2
+    return 3
+  }
+  ensure_service
+}
 
 case "${1:-status}" in
   status)
-    if [ -z "$installed" ]; then
+    if [ -z "$client" ]; then
       printf '%s\n' '{"installed":false,"tasks":[],"connections":[],"error":"fn-sync is not installed"}'
       exit 0
     fi
     language="${2:-system}"
-    output=$(FNSYNC_LANGUAGE="$language" "$installed" status --json 2>&1) || {
-      python3 -c 'import json,sys; print(json.dumps({"installed": True, "tasks": [], "error": sys.stdin.read().strip()}))' <<EOF
+    missing=$(missing_dependencies)
+    if [ -n "$missing" ]; then
+      printf '{"installed":true,"ready":false,"distribution":"%s","missing_dependencies":"%s","tasks":[],"connections":[],"error":""}\n' \
+        "$client_distribution" "$missing"
+      exit 0
+    fi
+    output=$(FNSYNC_LANGUAGE="$language" run_client status --json 2>&1) || {
+      python3 -c 'import json,sys; print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' "$client_distribution" <<EOF
 $output
 EOF
       exit 0
     }
-    connections=$(FNSYNC_LANGUAGE="$language" "$installed" connection list --json 2>&1) || {
-      python3 -c 'import json,sys; print(json.dumps({"installed": True, "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' <<EOF
+    connections=$(FNSYNC_LANGUAGE="$language" run_client connection list --json 2>&1) || {
+      python3 -c 'import json,sys; print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' "$client_distribution" <<EOF
 $connections
 EOF
       exit 0
     }
-    python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"installed": True, "tasks": payload["tasks"], "connections": payload["connections"], "error": ""}))' <<EOF
+    python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": payload["tasks"], "connections": payload["connections"], "error": ""}))' "$client_distribution" <<EOF
 {"tasks":$output,"connections":$connections}
 EOF
     ;;
+  bootstrap)
+    bootstrap
+    ;;
+  install-dependencies)
+    language="${2:-system}"
+    missing=$(missing_dependencies)
+    if [ -n "$missing" ]; then
+      command -v pkexec >/dev/null 2>&1 || {
+        echo "pkexec is required to install FN Sync dependencies" >&2
+        exit 1
+      }
+      FNSYNC_LANGUAGE="$language" pkexec pacman -S --needed --noconfirm python rclone gjs gtk4 libsecret libnotify
+    fi
+    bootstrap
+    ;;
   sync)
-    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
-    FNSYNC_LANGUAGE="${2:-system}" exec "$installed" sync-now
+    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    language="${2:-system}"
+    shift 2 || true
+    FNSYNC_LANGUAGE="$language" exec_client sync-now
     ;;
   open)
-    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
-    FNSYNC_LANGUAGE="${2:-system}" exec "$installed" ui
+    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    language="${2:-system}"
+    shift 2 || true
+    FNSYNC_LANGUAGE="$language" exec_client ui
     ;;
   discover)
-    script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
     exec python3 "$script_dir/fn_sync_discover.py"
     ;;
   cli)
-    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
     shift
     language="${1:-system}"
     shift || true
     [ "$#" -gt 0 ] || { echo "fn-syncctl cli requires a command" >&2; exit 2; }
-    FNSYNC_LANGUAGE="$language" FNSYNC_STREAM_OUTPUT=1 exec "$installed" "$@"
+    FNSYNC_LANGUAGE="$language" FNSYNC_STREAM_OUTPUT=1 exec_client "$@"
+    ;;
+  client)
+    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    shift
+    exec_client "$@"
+    ;;
+  daemon)
+    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    exec_client daemon
     ;;
   *)
-    echo "usage: fn-syncctl [status|sync|open|discover|cli ...]" >&2
+    echo "usage: fn-syncctl [status|bootstrap|install-dependencies|sync|open|discover|cli ...|client ...|daemon]" >&2
     exit 2
     ;;
 esac
