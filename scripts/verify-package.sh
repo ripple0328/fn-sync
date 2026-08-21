@@ -36,6 +36,7 @@ for expected in \
   usr/share/fn-sync/omarchy-plugin/README.md \
   usr/share/fn-sync/omarchy-plugin/README.zh-CN.md \
   usr/share/fn-sync/omarchy-plugin/LICENSE \
+  usr/share/fn-sync/omarchy-plugin/THIRD_PARTY_NOTICES.md \
   usr/share/fn-sync/omarchy-plugin/preview.png \
   usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl \
   usr/share/doc/fn-sync/README.md \
@@ -79,9 +80,15 @@ test -f "$plugin_root/LICENSE"
 test -f "$plugin_root/preview.png"
 test -f "$plugin_root/README.md"
 test -f "$plugin_root/README.zh-CN.md"
-test -x "$plugin_root/runtime/fnsync.py"
-test -f "$plugin_root/runtime/ui/app.js"
+test -f "$plugin_root/THIRD_PARTY_NOTICES.md"
 test -f "$plugin_root/runtime/fnsync.service"
+test ! -e "$plugin_root/runtime/ui/app.js"
+if [ -x "$plugin_root/runtime/fnsync.py" ]; then
+  test ! -d "$plugin_root/runtime/bin"
+else
+  test -x "$plugin_root/runtime/bin/fn-sync-runtime-amd64"
+  test -x "$plugin_root/runtime/bin/fn-sync-runtime-arm64"
+fi
 test "$(jq -r .version "$plugin_root/manifest.json")" = "$version"
 test "$(jq -r .name "$plugin_root/manifest.json")" = "FN sync"
 if find "$plugin_root" -type l -print -quit | grep -q .; then

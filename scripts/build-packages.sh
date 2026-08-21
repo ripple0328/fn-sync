@@ -7,13 +7,17 @@ build_root=$(mktemp -d /tmp/fn-sync-package.XXXXXX)
 source_root="$build_root/fn-sync-$version"
 arch_dir="$project_dir/packaging/arch"
 dist_dir="$project_dir/dist"
+plugin_runtime_dir=${FNSYNC_PLUGIN_RUNTIME_DIR:-}
+plugin_runtime_arches=${FNSYNC_PLUGIN_RUNTIME_ARCHES:-"amd64 arm64"}
 
 cleanup() {
   rm -rf "$build_root"
 }
 trap cleanup EXIT INT TERM
 
-"$project_dir/scripts/sync-plugin-runtime.sh"
+# Keep the system-package source portable and auditable. Release jobs replace
+# this fallback with standalone binaries only for the plugin archive below.
+FNSYNC_PLUGIN_RUNTIME_DIR='' "$project_dir/scripts/sync-plugin-runtime.sh"
 
 mkdir -p "$source_root" "$dist_dir"
 for item in VERSION LICENSE README.md README.zh-CN.md assets bin docs omarchy-plugin scripts src ui; do
@@ -37,6 +41,11 @@ if [ -z "$package_path" ]; then
 fi
 install -m644 "$package_path" "$dist_dir/$(basename "$package_path")"
 
+if [ -n "$plugin_runtime_dir" ]; then
+  FNSYNC_PLUGIN_RUNTIME_DIR="$plugin_runtime_dir" \
+    FNSYNC_PLUGIN_RUNTIME_ARCHES="$plugin_runtime_arches" \
+    "$project_dir/scripts/sync-plugin-runtime.sh"
+fi
 tar --exclude='*/__pycache__' --exclude='*.pyc' -czf "$dist_dir/fn-sync-omarchy-plugin-$version.tar.gz" -C "$project_dir/omarchy-plugin" .
 
 bundle_root="$build_root/fn-sync-omarchy-bundle-$version"

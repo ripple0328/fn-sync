@@ -26,7 +26,7 @@ jobs:
       - name: Install lint and coverage tools
         run: python -m pip install --disable-pip-version-check coverage ruff
       - name: Lint Python
-        run: ruff check src tests omarchy-plugin/scripts omarchy-plugin/tests
+        run: ruff check src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
       - name: Run controller and package tests with coverage
         env:
           FNSYNC_COVERAGE_SUBPROCESS: "1"
@@ -57,6 +57,7 @@ jobs:
           shellcheck \
             bin/fn-sync \
             bin/fnsync \
+            scripts/build-plugin-runtime.sh \
             scripts/build-packages.sh \
             scripts/ci.sh \
             scripts/demo-fn-syncctl \
@@ -110,6 +111,29 @@ jobs:
           for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
+
+  plugin-runtime:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install runtime build and test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes jq
+          python -m pip install --disable-pip-version-check pyinstaller==6.22.0
+      - name: Build the standalone AMD64 controller
+        run: ./scripts/build-plugin-runtime.sh amd64 "$RUNNER_TEMP/plugin-runtime"
+      - name: Test the plugin without a Python runtime
+        env:
+          FNSYNC_PLUGIN_RUNTIME_DIR: ${{ runner.temp }}/plugin-runtime
+          FNSYNC_PLUGIN_RUNTIME_ARCHES: amd64
+        run: |
+          ./scripts/sync-plugin-runtime.sh
+          test ! -e omarchy-plugin/runtime/fnsync.py
+          python -m unittest discover -s omarchy-plugin/tests -v
 
   rclone-e2e:
     runs-on: ubuntu-latest

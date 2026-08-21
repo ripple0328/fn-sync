@@ -59,6 +59,7 @@ class DistributionContractTests(unittest.TestCase):
                 "README.md",
                 "README.zh-CN.md",
                 "LICENSE",
+                "THIRD_PARTY_NOTICES.md",
                 "preview.png",
                 "assets/fn-sync-symbolic.png",
                 "scripts/fn-syncctl",
@@ -101,7 +102,7 @@ class DistributionContractTests(unittest.TestCase):
             self.assertTrue((plugin / entry_point).is_file())
         self.assertFalse(any(path.is_symlink() for path in plugin.rglob("*")))
         self.assertTrue((plugin / "runtime" / "fnsync.py").is_file())
-        self.assertTrue((plugin / "runtime" / "ui" / "app.js").is_file())
+        self.assertFalse((plugin / "runtime" / "ui" / "app.js").exists())
         self.assertTrue((plugin / "runtime" / "fnsync.service").is_file())
 
     def test_services_launch_the_stable_command(self):

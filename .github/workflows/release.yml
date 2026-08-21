@@ -8,7 +8,34 @@ permissions:
   contents: write
 
 jobs:
+  plugin-runtime:
+    strategy:
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install the pinned runtime builder
+        run: python -m pip install --disable-pip-version-check pyinstaller==6.22.0
+      - name: Build standalone plugin controller
+        run: ./scripts/build-plugin-runtime.sh "${{ matrix.architecture }}" "$RUNNER_TEMP/plugin-runtime"
+      - name: Upload standalone plugin controller
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-plugin-runtime-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
+          if-no-files-found: error
+          retention-days: 1
+
   build:
+    needs: plugin-runtime
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
@@ -17,6 +44,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Download standalone plugin controllers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-plugin-runtime-*
+          path: build/plugin-runtime
+          merge-multiple: true
       - name: Verify tag and build release artifacts
         run: |
           version=$(tr -d '[:space:]' < VERSION)
@@ -24,7 +57,7 @@ jobs:
           test -d .git
           useradd --create-home builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
-          runuser -u builder -- ./scripts/build-packages.sh
+          runuser -u builder -- env FNSYNC_PLUGIN_RUNTIME_DIR="$GITHUB_WORKSPACE/build/plugin-runtime" ./scripts/build-packages.sh
           runuser -u builder -- ./scripts/release-source.sh "$GITHUB_REF_NAME" "dist/fn-sync-$version.tar.gz"
           runuser -u builder -- ./scripts/prepare-aur.sh "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync"
           cp "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync/"

@@ -50,7 +50,9 @@ class PublishingContractTests(unittest.TestCase):
             "## Installation",
             "omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes",
             "only FN Sync installation command required on Omarchy",
-            "without an AUR package or a second terminal command",
+            "needs no host Python, AUR package, GTK/GJS",
+            "pinned official release",
+            "no administrator access is needed",
             "omarchy plugin update community.fnos-sync --yes",
             "## Removal",
             "omarchy plugin remove community.fnos-sync --yes",
@@ -95,8 +97,9 @@ class PublishingContractTests(unittest.TestCase):
             self.assertIn(required, workflow)
         self.assertNotIn("ssh-keyscan", workflow)
 
-        install_position = workflow.index("Install release dependencies")
-        checkout_position = workflow.index("actions/checkout@v7")
+        build_job = workflow.split("  build:\n", 1)[1].split("  github-release:\n", 1)[0]
+        install_position = build_job.index("Install release dependencies")
+        checkout_position = build_job.index("actions/checkout@v7")
         self.assertLess(install_position, checkout_position)
 
     def test_manual_aur_recovery_uses_the_verified_release_source(self):
@@ -159,6 +162,11 @@ class PublishingContractTests(unittest.TestCase):
         for required in (
             "secrets.PLUGIN_DEPLOY_KEY",
             "omarchy-plugin/PanelPageHeader.qml",
+            "pyinstaller==6.22.0",
+            "ubuntu-24.04-arm",
+            "scripts/build-plugin-runtime.sh",
+            "FNSYNC_PLUGIN_RUNTIME_DIR",
+            "actions/download-artifact@v8",
             "git subtree split --prefix=omarchy-plugin",
             "ripple0328/omarchy-fn-sync.git",
             "git fetch plugin main",

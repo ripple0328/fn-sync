@@ -17,7 +17,7 @@ The application is displayed as **FN sync**, or **飞牛** when the system
 interface language is Chinese. The package name, command, and internal paths
 remain `fn-sync` for installation and script compatibility.
 
-> The current version is `0.9.1`. Discovery, authorization, folder browsing,
+> The current version is `0.10.0`. Discovery, authorization, folder browsing,
 > and large transfers have been validated against a real fnOS NAS. The Omarchy
 > panel has only two top-level destinations, **Tasks** and **Settings**.
 > Connection pages use quiet, theme-aware breadcrumb navigation, and each task
@@ -37,12 +37,15 @@ remain `fn-sync` for installation and script compatibility.
 | `fn-sync` controller + rclone | WebDAV transfer, task state, conflict handling, and deletion safeguards | No |
 | systemd user service | Scheduled background synchronization | No |
 | GTK 4/GJS client | Connections, tasks, first-sync guidance, pause, and sync-now actions | No |
-| `community.fnos-sync` plugin | Native Omarchy panel plus a bundled copy of the controller and GTK client | Yes; self-contained |
+| `community.fnos-sync` plugin | Native Omarchy panel plus its controller and service | Yes; self-contained |
 
-The Omarchy plugin includes the controller and GTK client so it can be installed
-like a regular plugin. File transfers still run in a separate Python/rclone
-process, never inside the long-running `omarchy-shell` process, and the plugin
-never stores WebDAV passwords.
+The Omarchy panel contains the complete graphical workflow, so the plugin does
+not require the separate GTK/GJS client. It bundles the controller and service
+as architecture-specific standalone executables, and can prepare a pinned,
+checksum-verified rclone executable in the user's data directory when no
+supported system copy exists. Transfers still run outside the long-running
+`omarchy-shell` process, and the plugin never stores WebDAV passwords in QML or
+plugin settings.
 
 Plugin status refreshes when the widget loads, whenever the panel opens, after
 an action completes, and on a background timer. The default interval is 30
@@ -100,12 +103,14 @@ omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --
 ```
 
 That is the only FN Sync installation command an Omarchy user needs. The plugin
-repository contains the controller, GTK client, and background-service unit.
-On first open, a setup card offers to install any missing signed Arch runtime
-components through the system authentication dialog. It does not install an
-AUR package or ask the user to run a second command. The setup is explicit
-because Omarchy's plugin installer deliberately never executes install hooks or
-requests elevated privileges.
+repository contains the controller and background-service unit. On first open,
+the setup card prepares its private rclone runtime from the pinned official
+release when no supported system copy exists. The download is verified against
+a checksum shipped with the reviewed plugin source and does not need root. The
+controller and LAN discovery helper include their own Python runtime, so Python
+is not required on the machine. No AUR package, GTK/GJS runtime, administrator
+prompt, or second terminal command is required. The setup remains explicit
+because Omarchy's plugin installer deliberately never executes install hooks.
 
 Update it through Omarchy like any other Git-managed plugin:
 
@@ -136,9 +141,9 @@ only when invoking pacman:
 
 Artifacts are written to `dist/`:
 
-- `fn-sync-0.9.1-1-any.pkg.tar.zst`: Arch/pacman system package.
-- `fn-sync-omarchy-plugin-0.9.1.tar.gz`: self-contained Omarchy plugin.
-- `fn-sync-omarchy-bundle-0.9.1.tar.gz`: portable bundle containing both
+- `fn-sync-0.10.0-1-any.pkg.tar.zst`: Arch/pacman system package.
+- `fn-sync-omarchy-plugin-0.10.0.tar.gz`: self-contained Omarchy plugin.
+- `fn-sync-omarchy-bundle-0.10.0.tar.gz`: portable bundle containing both
   packages and the installer.
 
 After installation, the official double-loop FN Sync mark appears on the right
@@ -157,8 +162,7 @@ from the current theme. FN/飞牛 and its icon remain trademarks of their owner.
 
 The interface follows the desktop locale by default: `zh*` selects Simplified
 Chinese and every other locale selects English. Settings can override this
-with **System default**, **English**, or **简体中文**. The full client inherits
-the same choice when opened from the panel.
+with **System default**, **English**, or **简体中文**.
 
 Non-Omarchy Linux desktops can use the GTK fallback with `fn-sync ui`.
 
@@ -174,10 +178,18 @@ publishes the plugin subtree to `ripple0328/omarchy-fn-sync`, with
 To install from source without writing to the pacman database:
 
 ```bash
-omarchy pkg add rclone python gjs gtk4 libsecret libnotify
-./scripts/install.sh
+omarchy pkg add python
 ./scripts/install-omarchy-plugin.sh
 ```
+
+The published plugin prepares its own rclone runtime when needed and uses
+standalone controller builds for AMD64 and ARM64. Python and PyInstaller are
+build-time tools only for releases; the command above deliberately keeps the
+readable Python fallback for source-level development. `libsecret` and
+`libnotify` remain optional integrations; without them, credentials use the
+documented protected-file fallback and desktop failure notifications are
+omitted. GTK/GJS is needed only for the separate non-Omarchy `fn-sync ui`
+client.
 
 ## Configure fnOS
 

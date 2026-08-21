@@ -122,12 +122,6 @@ BarWidget {
         syncProcess.running = true;
     }
 
-    function openClient() {
-        if (!installed || !runtimeReady)
-            return;
-        Quickshell.execDetached([controlPath, "open", languagePreference]);
-    }
-
     function installDependencies() {
         if (installingDependencies || dependencyProcess.running)
             return;
@@ -342,8 +336,6 @@ BarWidget {
         onPressed: function (buttonCode) {
             if (buttonCode === Qt.RightButton)
                 root.syncNow();
-            else if (buttonCode === Qt.MiddleButton)
-                root.openClient();
             else
                 root.togglePanel();
         }

@@ -21,9 +21,11 @@ private LAN. A responding WebDAV endpoint fills the address automatically;
 an fnOS host without WebDAV is labeled clearly and can open the management UI.
 The form still requires a successful login and folder test.
 
-The plugin contains its own FN Sync controller, GTK client, and background
-service unit. Transfers run out of process through rclone; no WebDAV password
-is stored in QML or plugin settings.
+The Omarchy panel contains the complete graphical workflow. The plugin bundles
+its FN Sync controller, LAN discovery helper, and background service. The two
+helpers are standalone executables for AMD64 and ARM64, so neither Python nor
+the separate GTK/GJS client is required. Transfers run out of process through
+rclone; no WebDAV password is stored in QML or plugin settings.
 
 ## Installation
 
@@ -33,10 +35,13 @@ Install it like a regular Omarchy plugin:
 omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-This is the only FN Sync installation command required on Omarchy. The first
-open shows a one-time setup card only when signed Arch runtime components are
-missing; its button uses the system authentication dialog and completes setup
-without an AUR package or a second terminal command.
+This is the only FN Sync installation command required on Omarchy. If no
+supported system rclone exists, the one-time setup card prepares a private copy
+from the pinned official release under the user's data directory. Its archive
+is checked against a SHA-256 value shipped with the reviewed plugin source, and
+no administrator access is needed. The controller and discovery helper include
+their own Python runtime. The plugin needs no host Python, AUR package, GTK/GJS
+runtime, administrator prompt, or second terminal command.
 
 Update the Git-managed installation with:
 
@@ -59,9 +64,9 @@ omarchy plugin remove community.fnos-sync --yes
 ```
 
 Removing the plugin does not delete either synchronized folder. The user's task
-configuration and logs remain under the normal XDG config and state directories
-unless the user removes them separately. Shared Arch runtime components are not
-removed automatically.
+configuration and logs remain under the normal XDG directories unless the user
+removes them separately. The private rclone runtime also remains available for
+a reinstall; a system-installed rclone is never changed or removed.
 
 The plugin uses Omarchy's `Color`, `Style`, `BorderSurface`, `KeyboardPanel`,
 `Button`, `TextField`, `Dropdown`, and `Toggle` components so it follows the
@@ -107,7 +112,8 @@ There is no manual refresh button in the panel.
 Passwords are requested only while connecting or reauthorizing a NAS. The
 client prefers the desktop Secret Service and falls back to rclone's reversible
 obscured credential format when Secret Service is unavailable. The plugin does
-not retain a password.
+not retain a password. Secret Service and desktop notifications are optional
+integrations rather than installation prerequisites.
 
 fn-sync uses fnOS's documented WebDAV service. It supports multiple tasks,
 three sync modes, scheduling, filters, previews, conflict copies, deletion

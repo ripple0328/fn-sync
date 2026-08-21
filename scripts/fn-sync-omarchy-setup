@@ -74,13 +74,21 @@ install -m644 "$source_dir/FnSyncIcon.qml" "$stage_dir/FnSyncIcon.qml"
 install -m644 "$source_dir/assets/fn-sync-symbolic.png" "$stage_dir/assets/fn-sync-symbolic.png"
 install -m755 "$source_dir/scripts/fn-syncctl" "$stage_dir/scripts/fn-syncctl"
 install -m755 "$source_dir/scripts/fn_sync_discover.py" "$stage_dir/scripts/fn_sync_discover.py"
-if [ -f "$source_dir/runtime/fnsync.py" ]; then
-  mkdir -p "$stage_dir/runtime/ui"
-  install -m755 "$source_dir/runtime/fnsync.py" "$stage_dir/runtime/fnsync.py"
-  install -m644 "$source_dir/runtime/ui/app.js" "$stage_dir/runtime/ui/app.js"
+if [ -f "$source_dir/runtime/fnsync.py" ] || [ -d "$source_dir/runtime/bin" ]; then
+  mkdir -p "$stage_dir/runtime"
+  if [ -f "$source_dir/runtime/fnsync.py" ]; then
+    install -m755 "$source_dir/runtime/fnsync.py" "$stage_dir/runtime/fnsync.py"
+  fi
+  if [ -d "$source_dir/runtime/bin" ]; then
+    mkdir -p "$stage_dir/runtime/bin"
+    for binary in "$source_dir"/runtime/bin/fn-sync-runtime-*; do
+      [ -f "$binary" ] || continue
+      install -m755 "$binary" "$stage_dir/runtime/bin/$(basename -- "$binary")"
+    done
+  fi
   install -m644 "$source_dir/runtime/fnsync.service" "$stage_dir/runtime/fnsync.service"
 fi
-for documentation in README.md README.zh-CN.md LICENSE preview.png; do
+for documentation in README.md README.zh-CN.md LICENSE THIRD_PARTY_NOTICES.md preview.png; do
   if [ -f "$source_dir/$documentation" ]; then
     install -m644 "$source_dir/$documentation" "$stage_dir/$documentation"
   fi

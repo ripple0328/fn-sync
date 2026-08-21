@@ -3,14 +3,109 @@ set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 plugin_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+case "$(uname -m)" in
+  x86_64|amd64) runtime_arch=amd64 ;;
+  aarch64|arm64) runtime_arch=arm64 ;;
+  *) runtime_arch=unsupported ;;
+esac
+bundled_binary="$plugin_dir/runtime/bin/fn-sync-runtime-$runtime_arch"
 bundled_client="$plugin_dir/runtime/fnsync.py"
 service_source="$plugin_dir/runtime/fnsync.service"
+plugin_version=$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$plugin_dir/manifest.json" | sed -n '1p')
+service_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/fn-sync"
+service_version_file="$service_state_dir/plugin-service-version"
+managed_runtime_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fn-sync/runtime"
+managed_rclone="$managed_runtime_dir/rclone"
+rclone_release="1.75.0"
+rclone_binary=""
+
+rclone_supported() {
+  [ -x "${1:-}" ] || return 1
+  version=$("$1" version 2>/dev/null | sed -n 's/^rclone v\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p' | sed -n '1p')
+  [ -n "$version" ] || return 1
+  major=${version%% *}
+  minor=${version#* }
+  [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 66 ]; }
+}
+
+select_rclone() {
+  rclone_binary=""
+  system_rclone=$(command -v rclone 2>/dev/null || true)
+  if rclone_supported "$system_rclone"; then
+    rclone_binary="$system_rclone"
+  elif rclone_supported "$managed_rclone"; then
+    rclone_binary="$managed_rclone"
+  fi
+  if [ -n "$rclone_binary" ]; then
+    FNSYNC_RCLONE="$rclone_binary"
+    export FNSYNC_RCLONE
+  else
+    unset FNSYNC_RCLONE
+  fi
+}
+
+install_managed_rclone() (
+  case "$(uname -m)" in
+    x86_64|amd64)
+      archive_arch=amd64
+      expected_sha256=aa2804e08f48250e71009c727124b6341cd0288465804a9a09d14663cabafbaa
+      ;;
+    aarch64|arm64)
+      archive_arch=arm64
+      expected_sha256=d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203
+      ;;
+    *)
+      echo "FN Sync does not have a managed rclone build for $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  for command_name in curl bsdtar sha256sum; do
+    command -v "$command_name" >/dev/null 2>&1 || {
+      echo "$command_name is required to prepare FN Sync's private rclone runtime" >&2
+      exit 1
+    }
+  done
+
+  archive="rclone-v${rclone_release}-linux-${archive_arch}.zip"
+  url="https://downloads.rclone.org/v${rclone_release}/${archive}"
+  temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/fn-sync-rclone.XXXXXX")
+  trap 'rm -rf -- "$temp_dir"' EXIT INT TERM
+
+  curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+    --output "$temp_dir/$archive" "$url"
+  actual_sha256=$(sha256sum "$temp_dir/$archive" | awk '{print $1}')
+  if [ "$actual_sha256" != "$expected_sha256" ]; then
+    echo "The downloaded rclone archive failed its pinned SHA-256 check" >&2
+    exit 1
+  fi
+
+  bsdtar -xf "$temp_dir/$archive" -C "$temp_dir"
+  extracted="$temp_dir/rclone-v${rclone_release}-linux-${archive_arch}/rclone"
+  [ -f "$extracted" ] || {
+    echo "The downloaded rclone archive did not contain the expected executable" >&2
+    exit 1
+  }
+  mkdir -p "$managed_runtime_dir"
+  install -m 0755 "$extracted" "$managed_rclone"
+  rclone_supported "$managed_rclone" || {
+    echo "The prepared rclone executable could not be verified" >&2
+    exit 1
+  }
+)
+
+select_rclone
 
 client="${FNSYNC_BIN:-}"
 client_mode="command"
 client_distribution=system
 if [ -n "$client" ] && [ ! -x "$client" ]; then
   client=""
+fi
+if [ -z "$client" ] && [ -x "$bundled_binary" ]; then
+  client="$bundled_binary"
+  client_mode=binary
+  client_distribution=plugin
 fi
 if [ -z "$client" ] && [ -f "$bundled_client" ]; then
   client="$bundled_client"
@@ -45,10 +140,10 @@ exec_client() {
 
 missing_dependencies() {
   missing=""
-  command -v python3 >/dev/null 2>&1 || missing="python"
-  command -v rclone >/dev/null 2>&1 || missing="${missing:+$missing,}rclone"
-  command -v gjs >/dev/null 2>&1 || missing="${missing:+$missing,}gjs"
-  command -v gtk4-launch >/dev/null 2>&1 || missing="${missing:+$missing,}gtk4"
+  if [ "$client_mode" = python ]; then
+    command -v python3 >/dev/null 2>&1 || missing="python"
+  fi
+  [ -n "$rclone_binary" ] || missing="${missing:+$missing,}rclone"
   printf '%s' "$missing"
 }
 
@@ -56,15 +151,28 @@ ensure_service() {
   [ -f "$service_source" ] || return 0
   unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   unit="$unit_dir/fnsync.service"
+  unit_changed=0
   mkdir -p "$unit_dir"
   if [ ! -f "$unit" ] || ! cmp -s "$service_source" "$unit"; then
     install -m 0644 "$service_source" "$unit"
     systemctl --user daemon-reload
+    unit_changed=1
   fi
   if ! systemctl --user is-enabled --quiet fnsync.service 2>/dev/null \
     || ! systemctl --user is-active --quiet fnsync.service 2>/dev/null; then
     systemctl --user enable --now fnsync.service >/dev/null
+  elif [ "$unit_changed" -eq 1 ] || {
+    [ -n "$plugin_version" ] \
+      && [ "$(sed -n '1p' "$service_version_file" 2>/dev/null || true)" != "$plugin_version" ]
+  }; then
+    systemctl --user restart fnsync.service
   fi
+}
+
+record_service_version() {
+  [ -n "$plugin_version" ] || return 0
+  mkdir -p "$service_state_dir"
+  printf '%s\n' "$plugin_version" > "$service_version_file"
 }
 
 bootstrap() {
@@ -99,33 +207,34 @@ case "${1:-status}" in
     # live plugin reload.
     ensure_service
     output=$(FNSYNC_LANGUAGE="$language" run_client status --json 2>&1) || {
-      python3 -c 'import json,sys; print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' "$client_distribution" <<EOF
-$output
-EOF
+      jq -cn --arg distribution "$client_distribution" --arg error "$output" \
+        '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:[],connections:[],error:($error|rtrimstr("\n"))}'
       exit 0
     }
     connections=$(FNSYNC_LANGUAGE="$language" run_client connection list --json 2>&1) || {
-      python3 -c 'import json,sys; print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' "$client_distribution" <<EOF
-$connections
-EOF
+      jq -cn --arg distribution "$client_distribution" --arg error "$connections" \
+        '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:[],connections:[],error:($error|rtrimstr("\n"))}'
       exit 0
     }
-    python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": payload["tasks"], "connections": payload["connections"], "error": ""}))' "$client_distribution" <<EOF
-{"tasks":$output,"connections":$connections}
-EOF
+    jq -cn --arg distribution "$client_distribution" --argjson tasks "$output" \
+      --argjson connections "$connections" \
+      '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:$tasks,connections:$connections,error:""}'
     ;;
   bootstrap)
     bootstrap
     ;;
   install-dependencies)
     language="${2:-system}"
-    missing=$(missing_dependencies)
-    if [ -n "$missing" ]; then
+    if [ "$client_mode" = python ] && ! command -v python3 >/dev/null 2>&1; then
       command -v pkexec >/dev/null 2>&1 || {
-        echo "pkexec is required to install FN Sync dependencies" >&2
+        echo "pkexec is required to install FN Sync's Python runtime" >&2
         exit 1
       }
-      FNSYNC_LANGUAGE="$language" pkexec pacman -S --needed --noconfirm python rclone gjs gtk4 libsecret libnotify
+      FNSYNC_LANGUAGE="$language" pkexec pacman -S --needed --noconfirm python
+    fi
+    if [ -z "$rclone_binary" ]; then
+      install_managed_rclone
+      select_rclone
     fi
     bootstrap
     ;;
@@ -135,13 +244,10 @@ EOF
     shift 2 || true
     FNSYNC_LANGUAGE="$language" exec_client sync-now
     ;;
-  open)
-    [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
-    language="${2:-system}"
-    shift 2 || true
-    FNSYNC_LANGUAGE="$language" exec_client ui
-    ;;
   discover)
+    if [ "$client_mode" = binary ]; then
+      exec_client plugin-discover
+    fi
     exec python3 "$script_dir/fn_sync_discover.py"
     ;;
   cli)
@@ -159,10 +265,11 @@ EOF
     ;;
   daemon)
     [ -n "$client" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    record_service_version
     exec_client daemon
     ;;
   *)
-    echo "usage: fn-syncctl [status|bootstrap|install-dependencies|sync|open|discover|cli ...|client ...|daemon]" >&2
+    echo "usage: fn-syncctl [status|bootstrap|install-dependencies|sync|discover|cli ...|client ...|daemon]" >&2
     exit 2
     ;;
 esac

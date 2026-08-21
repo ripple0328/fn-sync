@@ -7,6 +7,7 @@ __pycache__/
 coverage.xml
 htmlcov/
 dist/
+build/
 pkg/
 packaging/arch/src/
 packaging/arch/pkg/

@@ -6,12 +6,12 @@ cd "$project_dir"
 
 ./scripts/sync-plugin-runtime.sh
 
-python3 -m compileall -q src tests omarchy-plugin/scripts omarchy-plugin/tests
+python3 -m compileall -q src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s omarchy-plugin/tests -v
 
 if command -v ruff >/dev/null 2>&1; then
-  ruff check --no-cache src tests omarchy-plugin/scripts omarchy-plugin/tests
+  ruff check --no-cache src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
 elif [ "${CI:-}" = "true" ]; then
   echo "ruff is required in CI" >&2
   exit 1
@@ -20,6 +20,7 @@ fi
 shell_files="
 bin/fn-sync
 bin/fnsync
+scripts/build-plugin-runtime.sh
 scripts/build-packages.sh
 scripts/ci.sh
 scripts/demo-fn-syncctl

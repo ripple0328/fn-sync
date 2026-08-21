@@ -18,8 +18,10 @@ FN sync 是一个跟随主题的 Omarchy 状态栏组件和管理面板，用于
 直连的私有局域网；有响应的 WebDAV 端点可以自动填写地址。发现 fnOS 但没有
 WebDAV 时，界面会明确标注并可打开管理页面。最终仍须成功完成登录和文件夹测试。
 
-插件内置 FN Sync 控制器、GTK 客户端和后台服务单元。文件传输在独立的 rclone
-进程中运行；WebDAV 密码不会保存在 QML 或插件设置中。
+Omarchy 面板已经包含完整图形操作流程。插件内置 FN Sync 控制器、局域网发现助手
+和后台服务。两个助手都提供 AMD64 与 ARM64 独立可执行文件，因此不再依赖系统
+Python 或单独的 GTK/GJS 客户端。文件传输在独立的 rclone 进程中运行；WebDAV
+密码不会保存在 QML 或插件设置中。
 
 ## 安装
 
@@ -29,9 +31,11 @@ WebDAV 时，界面会明确标注并可打开管理页面。最终仍须成功�
 omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-这是 Omarchy 上安装飞牛所需的唯一命令。只有缺少已签名的 Arch 运行组件时，首次
-打开才会显示一次性设置卡；点击按钮后通过系统认证完成安装，不需要 AUR 软件包或
-第二条终端命令。
+这是 Omarchy 上安装飞牛所需的唯一命令。如果系统没有受支持的 rclone，首次打开
+的一次性设置卡会从固定的官方版本在用户数据目录准备插件私有副本，并使用插件源码
+内的 SHA-256 校验值验证归档，无需管理员权限。控制器与发现助手已经包含自己的
+Python 运行时；插件不需要系统 Python、AUR、GTK/GJS、管理员授权或第二条终端
+命令。
 
 使用下面的命令更新 Git 管理的插件：
 
@@ -53,8 +57,9 @@ systemctl --user daemon-reload
 omarchy plugin remove community.fnos-sync --yes
 ```
 
-移除插件不会删除任一同步文件夹。用户的任务配置与日志仍保留在标准的 XDG 配置
-和状态目录中，除非用户另行删除。共享的 Arch 运行组件不会自动移除。
+移除插件不会删除任一同步文件夹。用户的任务配置和日志仍保留在标准的 XDG 目录中，
+除非用户另行删除。插件私有 rclone 也会保留以便重新安装；系统安装的 rclone 不会
+被修改或移除。
 
 插件使用 Omarchy 的 `Color`、`Style`、`BorderSurface`、
 `KeyboardPanel`、`Button`、`TextField`、`Dropdown` 和 `Toggle`
@@ -92,7 +97,7 @@ FN sync 会在耗时的文件扫描前验证标记内容。如果标记缺失或
 
 密码只会在连接或重新授权 NAS 时请求。客户端优先使用桌面 Secret Service；
 Secret Service 不可用时回退到 rclone 的可逆 obscured 凭据格式。插件不保存
-密码。
+密码。Secret Service 和桌面通知只是可选集成，不是安装前提。
 
 FN sync 使用 fnOS 官方支持的 WebDAV 服务，支持多任务、三种同步模式、调度、
 过滤、只读检查、冲突副本、删除保护，以及限定在本机子网和已知端口的发现。

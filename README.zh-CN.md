@@ -15,7 +15,7 @@
 应用显示名为 **FN sync**；系统界面语言为中文时显示为 **飞牛**。包名、命令和
 内部路径仍使用 `fn-sync`，以保持安装与脚本兼容。
 
-> 当前版本为 `0.9.1`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
+> 当前版本为 `0.10.0`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
 > 验证。Omarchy 面板只保留“任务 / 设置”两个主导航；连接等子页使用安静、跟随
 > 主题的面包屑返回导航，每个任务卡也只显示一次同步状态。首次试用仍建议从一个
 > 新建的小目录开始。
@@ -33,11 +33,12 @@
 | `fn-sync` 控制器 + rclone | WebDAV 传输、任务状态、冲突与删除保护 | 否 |
 | systemd 用户服务 | 定时后台同步 | 否 |
 | GTK 4/GJS 客户端 | 连接、任务、首次同步引导、暂停与立即同步 | 否 |
-| `community.fnos-sync` 插件 | Omarchy 原生面板，以及内置的控制器和 GTK 客户端 | 是，完整自包含 |
+| `community.fnos-sync` 插件 | Omarchy 原生面板，以及内置的控制器和服务 | 是，完整自包含 |
 
-Omarchy 插件内置控制器与 GTK 客户端，因此可以像普通插件一样安装。文件传输仍在
-独立的 Python/rclone 进程中运行，不会在长期运行的 `omarchy-shell` 进程内执行；
-插件也不会保存 WebDAV 密码。
+Omarchy 面板已经包含完整的图形操作流程，因此插件不再依赖单独的 GTK/GJS 客户端。
+插件把控制器与服务打包为对应架构的独立可执行文件；如果系统没有受支持的 rclone，
+还会在用户数据目录准备一个固定版本并校验哈希的 rclone。文件传输仍在
+`omarchy-shell` 进程外运行，插件也不会把 WebDAV 密码保存在 QML 或插件设置中。
 
 插件会在加载时、每次打开面板时、操作完成后以及后台定时自动刷新状态。默认
 间隔为 30 秒，可通过插件的 `refreshIntervalSec` 设置调整，因此面板不需要
@@ -83,10 +84,12 @@ Omarchy 插件内置控制器与 GTK 客户端，因此可以像普通插件一�
 omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes
 ```
 
-这是 Omarchy 用户安装飞牛所需的唯一命令。插件仓库已经包含控制器、GTK 客户端
-和后台服务单元。首次打开时，如果缺少 Arch 运行组件，设置卡会通过系统认证对话框
-提供安装；无需安装 AUR 软件包，也无需再运行第二条命令。该授权会明确显示，因为
-Omarchy 的插件安装器按设计不会执行安装 hook 或请求提权。
+这是 Omarchy 用户安装飞牛所需的唯一命令。插件仓库已经包含控制器和后台服务单元。
+首次打开时，如果系统没有受支持的 rclone，设置卡会从固定的官方版本准备插件私有
+rclone，并使用插件源码内的校验值验证下载，无需 root。控制器和局域网发现助手
+已经包含自己的 Python 运行时，因此机器无需安装 Python。整个过程无需 AUR、
+GTK/GJS、管理员授权或第二条终端命令。设置保持显式触发，因为 Omarchy 的插件
+安装器按设计不会执行安装 hook。
 
 之后像其他 Git 管理的 Omarchy 插件一样更新：
 
@@ -114,9 +117,9 @@ cd fn-sync
 
 构建产物位于 `dist/`：
 
-- `fn-sync-0.9.1-1-any.pkg.tar.zst`：Arch/pacman 系统包。
-- `fn-sync-omarchy-plugin-0.9.1.tar.gz`：自包含 Omarchy 插件归档。
-- `fn-sync-omarchy-bundle-0.9.1.tar.gz`：包含前两者和安装器的便携包。
+- `fn-sync-0.10.0-1-any.pkg.tar.zst`：Arch/pacman 系统包。
+- `fn-sync-omarchy-plugin-0.10.0.tar.gz`：自包含 Omarchy 插件归档。
+- `fn-sync-omarchy-bundle-0.10.0.tar.gz`：包含前两者和安装器的便携包。
 
 安装后，状态栏右侧会显示飞牛同步官方双环标记，并打开跟随当前 Omarchy 主题的
 统一面板。标记的前景色、强调色和错误色均实时绑定系统主题。面板只有“任务 /
@@ -129,8 +132,7 @@ Omarchy 状态栏使用官方客户端的双箭头轮廓作为透明蒙版，再
 着色；飞牛及其图标商标归原权利人所有。
 
 界面语言默认跟随桌面区域设置：`zh*` 使用简体中文，其余语言使用英文。设置
-页面也可覆盖为“跟随系统”“English”或“简体中文”；从面板打开完整客户端时会
-沿用该选择。
+页面也可覆盖为“跟随系统”“English”或“简体中文”。
 
 非 Omarchy Linux 可以运行 `fn-sync ui` 使用 GTK 备用界面。
 
@@ -145,10 +147,15 @@ Omarchy 状态栏使用官方客户端的双箭头轮廓作为透明蒙版，再
 不希望写入 pacman 数据库时，可以继续使用：
 
 ```bash
-omarchy pkg add rclone python gjs gtk4 libsecret libnotify
-./scripts/install.sh
+omarchy pkg add python
 ./scripts/install-omarchy-plugin.sh
 ```
+
+发布的插件会在需要时自行准备 rclone，并为 AMD64 与 ARM64 提供独立控制器。
+Python 和 PyInstaller 对发布版而言只在构建阶段使用；上面的命令为了源码级开发，
+会保留可读的 Python 回退。`libsecret` 与 `libnotify` 只是可选集成：缺少
+前者时使用文档说明的受保护文件回退，缺少后者时不发送桌面失败通知。GTK/GJS
+只用于非 Omarchy 环境下单独运行的 `fn-sync ui` 客户端。
 
 ## 配置 fnOS
 

@@ -6,23 +6,62 @@ on:
     branches: [main]
     paths:
       - "omarchy-plugin/**"
+      - "src/fnsync.py"
+      - "scripts/build-plugin-runtime.sh"
+      - "scripts/fn-sync-plugin-runtime.py"
+      - "scripts/sync-plugin-runtime.sh"
       - ".github/workflows/publish-plugin.yml"
 
 permissions:
   contents: read
 
 jobs:
+  build-runtime:
+    strategy:
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install the pinned runtime builder
+        run: python -m pip install --disable-pip-version-check pyinstaller==6.22.0
+      - name: Build standalone plugin controller
+        run: ./scripts/build-plugin-runtime.sh "${{ matrix.architecture }}" "$RUNNER_TEMP/plugin-runtime"
+      - name: Upload standalone plugin controller
+        uses: actions/upload-artifact@v7
+        with:
+          name: fn-sync-runtime-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
+    needs: build-runtime
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Download standalone plugin controllers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: fn-sync-runtime-*
+          path: ${{ runner.temp }}/plugin-runtime
+          merge-multiple: true
       - name: Install validation tools
         run: |
           sudo apt-get update
           sudo apt-get install --yes jq shellcheck qt6-declarative-dev-tools
       - name: Validate the plugin tree
+        env:
+          FNSYNC_PLUGIN_RUNTIME_DIR: ${{ runner.temp }}/plugin-runtime
         run: |
           ./scripts/sync-plugin-runtime.sh
           curl --fail --silent --show-error --location \

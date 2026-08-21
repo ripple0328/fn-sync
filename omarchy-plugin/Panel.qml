@@ -1179,7 +1179,7 @@ Panel {
                             Text {
                                 width: parent.width
                                 text: root.installed
-                                    ? root.l10n("The client is already included in this plugin. Authorize the required Arch components once to enable file transfer and the desktop client.", "客户端已包含在插件中。只需授权安装所需的 Arch 组件，即可启用文件传输和桌面客户端。")
+                                    ? root.l10n("The client and interface are included. Finish the one-time preparation of its private, verified transfer runtime.", "客户端和界面均已内置。完成一次性设置，即可准备插件私有且经过校验的传输运行组件。")
                                     : root.l10n("The plugin checkout does not contain its bundled client. Update or reinstall the plugin.", "插件目录中没有内置客户端，请更新或重新安装插件。")
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -1200,7 +1200,7 @@ Panel {
                             Button {
                                 visible: root.installed
                                 width: parent.width
-                                text: root.installingDependencies ? root.l10n("Installing required components…", "正在安装所需组件…") : root.l10n("Install required components", "安装所需组件")
+                                text: root.installingDependencies ? root.l10n("Finishing setup…", "正在完成设置…") : root.l10n("Finish setup", "完成设置")
                                 bordered: true
                                 focusable: true
                                 enabled: !root.installingDependencies
@@ -1702,18 +1702,6 @@ Panel {
                             }
                         }
 
-                        Button {
-                            width: parent.width
-                            text: root.l10n("Open full client", "打开完整客户端")
-                            leftAlign: true
-                            bordered: true
-                            focusable: true
-                            enabled: root.installed && !root.busy
-                            foreground: root.foreground
-                            fontFamily: root.fontFamily
-                            onClicked: if (root.hostWidget)
-                                root.hostWidget.openClient()
-                        }
                     }
 
                     Column {

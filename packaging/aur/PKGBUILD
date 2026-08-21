@@ -1,5 +1,5 @@
 pkgname=fn-sync
-pkgver=0.9.1
+pkgver=0.10.0
 pkgrel=1
 pkgdesc="Safe fnOS WebDAV sync client with Omarchy integration"
 arch=('any')
@@ -40,6 +40,7 @@ package() {
   install -Dm644 omarchy-plugin/README.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/README.md"
   install -Dm644 omarchy-plugin/README.zh-CN.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/README.zh-CN.md"
   install -Dm644 omarchy-plugin/LICENSE "$pkgdir/usr/share/fn-sync/omarchy-plugin/LICENSE"
+  install -Dm644 omarchy-plugin/THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/THIRD_PARTY_NOTICES.md"
   install -Dm644 omarchy-plugin/preview.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/preview.png"
 
   install -Dm644 README.md "$pkgdir/usr/share/doc/fn-sync/README.md"

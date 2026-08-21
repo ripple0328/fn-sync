@@ -97,12 +97,12 @@ class InstallerTests(unittest.TestCase):
             "README.md",
             "README.zh-CN.md",
             "LICENSE",
+            "THIRD_PARTY_NOTICES.md",
             "preview.png",
             "assets/fn-sync-symbolic.png",
             "scripts/fn-syncctl",
             "scripts/fn_sync_discover.py",
             "runtime/fnsync.py",
-            "runtime/ui/app.js",
             "runtime/fnsync.service",
         }
         actual = {
