@@ -28,23 +28,29 @@ class PluginContractTests(unittest.TestCase):
 
     def test_panel_keeps_two_top_level_pages_and_localized_brand(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+        bar = (ROOT / "BarWidget.qml").read_text(encoding="utf-8")
         self.assertIn('title: root.l10n("FN sync", "飞牛")', panel)
         self.assertIn('root.showPrimary("tasks")', panel)
         self.assertIn('root.showPrimary("settings")', panel)
         self.assertNotIn('title: "fn-sync"', panel)
+        self.assertIn('settings && settings.language || "system"', bar)
+        self.assertIn('Quickshell.env("LC_ALL")', bar)
+        self.assertIn('/^zh([_.-]|$)/i.test(systemLocale) ? "zh" : "en"', bar)
 
     def test_subpages_use_contextual_theme_native_navigation(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
         header = (ROOT / "PanelPageHeader.qml").read_text(encoding="utf-8")
         self.assertNotIn('text: root.l10n("Back", "返回")', panel)
         self.assertEqual(panel.count("PanelPageHeader {"), 5)
-        self.assertNotIn('iconText: "󰅁"', panel)
-        self.assertIn('backText: root.l10n("Settings", "设置")', panel)
-        self.assertIn('backText: root.l10n("Tasks", "任务")', panel)
-        self.assertIn('text: "\\u2039"', header)
-        self.assertIn("Style.hoverFillFor(root.foreground, root.accent)", header)
+        self.assertIn('backText: root.l10n("Back to Settings", "返回设置")', panel)
+        self.assertIn('backText: root.l10n("Back to Tasks", "返回任务")', panel)
+        self.assertIn("PanelActionButton {", header)
+        self.assertIn('iconText: "󰁍"', header)
+        self.assertIn("tooltipText: root.backText", header)
+        self.assertNotIn('text: root.backText', header)
+        self.assertIn("hoverColor: root.accent", header)
         self.assertIn("Accessible.role: Accessible.Button", header)
-        self.assertIn("activeFocusOnTab: true", header)
+        self.assertIn("focusable: true", header)
 
     def test_optional_task_state_is_always_a_boolean(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")

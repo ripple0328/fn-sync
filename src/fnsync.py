@@ -31,7 +31,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 APP_NAME = "fnsync"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 CONFIG_VERSION = 2
 MIN_RCLONE_VERSION = (1, 66, 0)
 MODES = ("two-way", "upload-only", "download-only")
