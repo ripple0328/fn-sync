@@ -11,7 +11,7 @@ and an Omarchy-native panel for connections, tasks, status and recovery.
 
 应用显示名为 **FN sync**；系统界面语言为中文时显示为 **飞牛**。包名、命令和内部路径仍使用 `fn-sync`，以保持安装与脚本兼容。
 
-> 当前版本为 `0.8.0`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已验证；Omarchy 面板仅保留“任务 / 设置”两个主导航，NAS 连接作为设置子页显示紧凑的返回导航，任务列表也只在所属任务卡中显示一次同步状态。首次使用仍建议从一个新建的小目录开始。
+> 当前版本为 `0.8.1`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已验证；Omarchy 面板仅保留“任务 / 设置”两个主导航，NAS 连接作为设置子页显示紧凑的图标返回导航，任务列表也只在所属任务卡中显示一次同步状态。首次使用仍建议从一个新建的小目录开始。
 
 ## Interface
 
@@ -89,9 +89,9 @@ cd fn-sync
 
 构建产物位于 `dist/`：
 
-- `fn-sync-0.8.0-1-any.pkg.tar.zst`：Arch/pacman 系统包；
-- `fn-sync-omarchy-plugin-0.8.0.tar.gz`：独立 Omarchy 插件归档；
-- `fn-sync-omarchy-bundle-0.8.0.tar.gz`：包含前两者和安装器的便携包。
+- `fn-sync-0.8.1-1-any.pkg.tar.zst`：Arch/pacman 系统包；
+- `fn-sync-omarchy-plugin-0.8.1.tar.gz`：独立 Omarchy 插件归档；
+- `fn-sync-omarchy-bundle-0.8.1.tar.gz`：包含前两者和安装器的便携包。
 
 安装后，状态栏右侧会显示飞牛同步官方双环标记，并打开跟随当前 Omarchy 主题的统一管理面板。标记的前景色、强调色和错误色均实时绑定系统主题。面板只有“Tasks / Settings”两个主入口；NAS 连接和授权位于 Settings 的子页，再由同步任务复用。密码仅在连接或重新授权时通过标准输入交给控制器，不保存在任务、QML 或插件设置中。
 
