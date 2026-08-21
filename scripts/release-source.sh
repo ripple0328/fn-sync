@@ -31,6 +31,10 @@ tar -tzf "$archive_gzip" | grep -Fxq "$prefix/VERSION"
 archive_version=$(tar -xOzf "$archive_gzip" "$prefix/VERSION" | tr -d '[:space:]')
 test "$archive_version" = "$version"
 
+# mktemp intentionally creates a private file. Release archives are public
+# inputs to packagers, so normalize the final artifact before another user
+# (the unprivileged AUR build account in CI) consumes it.
+chmod 0644 "$archive_gzip"
 mv "$archive_gzip" "$output"
 archive_gzip=
 

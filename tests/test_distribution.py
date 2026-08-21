@@ -78,6 +78,7 @@ class DistributionContractTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertGreater(archive.stat().st_size, 1024)
+            self.assertEqual(archive.stat().st_mode & 0o777, 0o644)
             with tarfile.open(archive, "r:gz") as handle:
                 names = set(handle.getnames())
                 self.assertIn(f"{prefix}/VERSION", names)
