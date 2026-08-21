@@ -62,6 +62,9 @@ jobs:
     container: archlinux:base-devel
     environment: aur
     steps:
+      - name: Install AUR publishing dependencies
+        run: pacman -Syu --noconfirm git openssh
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: release-artifacts
@@ -70,16 +73,14 @@ jobs:
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
-          pacman -Syu --noconfirm git openssh
           ssh_dir="$GITHUB_WORKSPACE/.aur-ssh"
           install -d -m 700 "$ssh_dir"
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$ssh_dir/aur"
           chmod 600 "$ssh_dir/aur"
-          ssh-keyscan -H aur.archlinux.org > "$ssh_dir/known_hosts"
-          chmod 600 "$ssh_dir/known_hosts"
+          install -m 600 .github/aur-known-hosts "$ssh_dir/known_hosts"
       - name: Publish PKGBUILD and .SRCINFO
         run: |
-          export GIT_SSH_COMMAND="ssh -i $GITHUB_WORKSPACE/.aur-ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$GITHUB_WORKSPACE/.aur-ssh/known_hosts -o StrictHostKeyChecking=yes"
+          export GIT_SSH_COMMAND="ssh -i $GITHUB_WORKSPACE/.aur-ssh/aur -o IdentitiesOnly=yes -o HostKeyAlgorithms=ssh-ed25519 -o UserKnownHostsFile=$GITHUB_WORKSPACE/.aur-ssh/known_hosts -o StrictHostKeyChecking=yes"
           git clone ssh://aur@aur.archlinux.org/fn-sync.git aur-repository
           cp dist/aur/fn-sync/PKGBUILD aur-repository/PKGBUILD
           cp dist/aur/fn-sync/.SRCINFO aur-repository/.SRCINFO
