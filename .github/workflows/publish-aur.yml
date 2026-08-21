@@ -1,0 +1,73 @@
+name: Publish AUR
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to publish
+        required: true
+        default: v0.8.0
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  aur:
+    if: vars.AUR_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    environment: aur
+    steps:
+      - name: Install publishing dependencies
+        run: pacman -Syu --noconfirm curl git openssh
+      - uses: actions/checkout@v7
+      - name: Download and verify the release source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          release_tag="$RELEASE_TAG"
+          version=${release_tag#v}
+          test "$release_tag" = "v$version"
+          test "$(tr -d '[:space:]' < VERSION)" = "$version"
+          mkdir -p dist
+          curl --fail --location \
+            --output "dist/fn-sync-$version.tar.gz" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$release_tag/fn-sync-$version.tar.gz"
+          test -s "dist/fn-sync-$version.tar.gz"
+          tar -tzf "dist/fn-sync-$version.tar.gz" | grep -Fxq "fn-sync-$version/VERSION"
+          test "$(tar -xOzf "dist/fn-sync-$version.tar.gz" "fn-sync-$version/VERSION" | tr -d '[:space:]')" = "$version"
+          ./scripts/prepare-aur.sh "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync"
+          cd dist/aur/fn-sync
+          makepkg --verifysource
+      - name: Configure AUR SSH access
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+          EOF
+      - name: Publish PKGBUILD and .SRCINFO
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          git clone ssh://aur@aur.archlinux.org/fn-sync.git aur-repository
+          cp dist/aur/fn-sync/PKGBUILD aur-repository/PKGBUILD
+          cp dist/aur/fn-sync/.SRCINFO aur-repository/.SRCINFO
+          cp dist/aur/fn-sync/fn-sync.install aur-repository/fn-sync.install
+          cd aur-repository
+          git config user.name "Qingbo Zhang"
+          git config user.email "ripple0328@gmail.com"
+          git add -- PKGBUILD .SRCINFO fn-sync.install
+          if git diff --cached --quiet; then
+            echo "AUR metadata is already current"
+            exit 0
+          fi
+          git commit -m "Update to ${RELEASE_TAG#v}"
+          git push origin master

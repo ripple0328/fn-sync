@@ -1,6 +1,9 @@
 import ast
 import json
 import re
+import subprocess
+import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -41,23 +44,45 @@ class DistributionContractTests(unittest.TestCase):
         self.assertIn("fn-sync", manifest["barWidget"]["aliases"])
 
     def test_package_bundles_the_complete_plugin_and_setup_helper(self):
-        pkgbuild = (ROOT / "packaging" / "arch" / "PKGBUILD").read_text(
-            encoding="utf-8"
-        )
-        for relative in (
-            "manifest.json",
-            "BarWidget.qml",
-            "Panel.qml",
-            "PanelPageHeader.qml",
-            "FnSyncIcon.qml",
-            "LICENSE",
-            "preview.png",
-            "assets/fn-sync-symbolic.png",
-            "scripts/fn-syncctl",
-            "scripts/fn_sync_discover.py",
-        ):
-            self.assertIn(f"omarchy-plugin/{relative}", pkgbuild)
-        self.assertIn("scripts/fn-sync-omarchy-setup", pkgbuild)
+        for template in ("arch", "aur"):
+            pkgbuild = (ROOT / "packaging" / template / "PKGBUILD").read_text(
+                encoding="utf-8"
+            )
+            for relative in (
+                "manifest.json",
+                "BarWidget.qml",
+                "Panel.qml",
+                "PanelPageHeader.qml",
+                "FnSyncIcon.qml",
+                "LICENSE",
+                "preview.png",
+                "assets/fn-sync-symbolic.png",
+                "scripts/fn-syncctl",
+                "scripts/fn_sync_discover.py",
+            ):
+                self.assertIn(f"omarchy-plugin/{relative}", pkgbuild)
+            self.assertIn("scripts/fn-sync-omarchy-setup", pkgbuild)
+
+    def test_release_source_archive_contains_the_tagged_tree(self):
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        prefix = f"fn-sync-{version}"
+        with tempfile.TemporaryDirectory(prefix="fn-sync-release-test-") as temp:
+            archive = Path(temp) / f"{prefix}.tar.gz"
+            result = subprocess.run(
+                [str(ROOT / "scripts" / "release-source.sh"), "HEAD", str(archive)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertGreater(archive.stat().st_size, 1024)
+            with tarfile.open(archive, "r:gz") as handle:
+                names = set(handle.getnames())
+                self.assertIn(f"{prefix}/VERSION", names)
+                self.assertIn(f"{prefix}/src/fnsync.py", names)
+                self.assertIn(f"{prefix}/omarchy-plugin/PanelPageHeader.qml", names)
 
     def test_plugin_repository_contract_has_no_symlinks(self):
         plugin = ROOT / "omarchy-plugin"

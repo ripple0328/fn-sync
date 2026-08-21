@@ -41,6 +41,27 @@ class PublishingContractTests(unittest.TestCase):
             "ssh://aur@aur.archlinux.org/fn-sync.git",
             "PKGBUILD .SRCINFO fn-sync.install",
             "git push origin master",
+            "test -d .git",
+        ):
+            self.assertIn(required, workflow)
+
+        install_position = workflow.index("Install release dependencies")
+        checkout_position = workflow.index("actions/checkout@v7")
+        self.assertLess(install_position, checkout_position)
+
+    def test_manual_aur_recovery_uses_the_verified_release_source(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-aur.yml").read_text(
+            encoding="utf-8"
+        )
+        for required in (
+            "workflow_dispatch",
+            "vars.AUR_PUBLISH_ENABLED == 'true'",
+            "secrets.AUR_SSH_PRIVATE_KEY",
+            "releases/download/$release_tag/fn-sync-$version.tar.gz",
+            "tar -tzf",
+            "./scripts/prepare-aur.sh",
+            "makepkg --verifysource",
+            "git push origin master",
         ):
             self.assertIn(required, workflow)
 
