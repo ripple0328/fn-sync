@@ -56,6 +56,7 @@ class PublishingContractTests(unittest.TestCase):
             "PKGBUILD .SRCINFO fn-sync.install",
             "git push origin master",
             "test -d .git",
+            "UserKnownHostsFile=$GITHUB_WORKSPACE/.aur-ssh/known_hosts",
         ):
             self.assertIn(required, workflow)
 
@@ -78,6 +79,7 @@ class PublishingContractTests(unittest.TestCase):
             'chown -R builder:builder "$GITHUB_WORKSPACE"',
             "runuser -u builder",
             "makepkg --verifysource",
+            "UserKnownHostsFile=$GITHUB_WORKSPACE/.aur-ssh/known_hosts",
             "git push origin master",
         ):
             self.assertIn(required, workflow)

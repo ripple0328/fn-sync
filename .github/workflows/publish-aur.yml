@@ -50,19 +50,17 @@ jobs:
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
-          cat >> ~/.ssh/config <<'EOF'
-          Host aur.archlinux.org
-            IdentityFile ~/.ssh/aur
-            IdentitiesOnly yes
-          EOF
+          ssh_dir="$GITHUB_WORKSPACE/.aur-ssh"
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$ssh_dir/aur"
+          chmod 600 "$ssh_dir/aur"
+          ssh-keyscan -H aur.archlinux.org > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/known_hosts"
       - name: Publish PKGBUILD and .SRCINFO
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          export GIT_SSH_COMMAND="ssh -i $GITHUB_WORKSPACE/.aur-ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$GITHUB_WORKSPACE/.aur-ssh/known_hosts -o StrictHostKeyChecking=yes"
           git clone ssh://aur@aur.archlinux.org/fn-sync.git aur-repository
           cp dist/aur/fn-sync/PKGBUILD aur-repository/PKGBUILD
           cp dist/aur/fn-sync/.SRCINFO aur-repository/.SRCINFO
