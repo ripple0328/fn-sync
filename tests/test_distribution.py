@@ -102,6 +102,17 @@ class DistributionContractTests(unittest.TestCase):
         self.assertIn("NoNewPrivileges=true", packaged)
         self.assertIn("PrivateTmp=true", packaged)
 
+    def test_package_verifier_executes_the_bundled_controller(self):
+        verifier = (ROOT / "scripts" / "verify-package.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('bsdtar -xf "$package_path" -C "$package_root"', verifier)
+        self.assertIn('plugin_root="$temp_dir/plugin-root"', verifier)
+        self.assertIn(
+            'python3 "$package_root/usr/lib/fn-sync/fnsync.py" --version',
+            verifier,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,8 +18,9 @@ fake rclone process.
 | Access markers, pause-on-mismatch and explicit repair | `tests/test_core.py` |
 | Deletion guard, conflict copies, backup directories and task locks | `tests/test_core.py` |
 | Background enable/disable, sync-now, status and logs | `tests/test_cli_integration.py` |
-| Package contents, Arch/AUR template parity, release archive integrity, version consistency, desktop localization and services | `tests/test_distribution.py`, `scripts/verify-package.sh` |
-| Bundled Omarchy plugin installation, backup, service enable and bar enable | `tests/test_installer.py` |
+| Streaming progress, silent-process timeout, scheduler isolation, shutdown signals, Secret Service and GTK launch | `tests/test_runtime.py` |
+| Package contents, executable packaged controller, Arch/AUR template parity, release archive integrity, version consistency, desktop localization and services | `tests/test_distribution.py`, `scripts/verify-package.sh` |
+| Bundled Omarchy plugin installation, backup, service enable, bar enable and the complete bundle install sequence | `tests/test_installer.py` |
 | Plugin manifest, QML parsing, discovery and official Omarchy validation | `omarchy-plugin/tests`, `scripts/ci.sh` |
 | README screenshots, CI gates, GitHub Release, gated/manual AUR publish and plugin subtree publish | `tests/test_publishing.py` |
 
@@ -39,9 +40,9 @@ installs both tools and always enforces those lint checks. Package verification 
 ./scripts/verify-package.sh
 ```
 
-CI also starts an authenticated rclone WebDAV server entirely inside the runner and proves
+CI currently runs 71 automated tests. It also starts an authenticated rclone WebDAV server entirely inside the runner and proves
 two-way initialization, incremental transfer, access-marker stopping and repair, and the
 non-deleting behavior of both one-way modes. It records branch coverage for the Python
-controller and discovery helper, with a hard
-minimum in `pyproject.toml`. A real fnOS smoke test remains a release acceptance check rather
+controller and discovery helper, with a hard 80% combined line-and-branch minimum in
+`pyproject.toml`. A real fnOS smoke test remains a release acceptance check rather
 than an automated test because it requires a private NAS account and modifies remote files.

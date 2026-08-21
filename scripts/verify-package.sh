@@ -55,23 +55,32 @@ cleanup() {
   rm -rf -- "$temp_dir"
 }
 trap cleanup EXIT INT TERM
-tar -xzf "$plugin_archive" -C "$temp_dir"
-test -f "$temp_dir/manifest.json"
-test -f "$temp_dir/LICENSE"
-test -f "$temp_dir/preview.png"
-test "$(jq -r .version "$temp_dir/manifest.json")" = "$version"
-test "$(jq -r .name "$temp_dir/manifest.json")" = "FN sync"
-if find "$temp_dir" -type l -print -quit | grep -q .; then
+
+package_root="$temp_dir/package-root"
+mkdir -p "$package_root"
+bsdtar -xf "$package_path" -C "$package_root"
+engine_version=$(python3 "$package_root/usr/lib/fn-sync/fnsync.py" --version)
+test "$engine_version" = "fn-sync $version"
+
+plugin_root="$temp_dir/plugin-root"
+mkdir -p "$plugin_root"
+tar -xzf "$plugin_archive" -C "$plugin_root"
+test -f "$plugin_root/manifest.json"
+test -f "$plugin_root/LICENSE"
+test -f "$plugin_root/preview.png"
+test "$(jq -r .version "$plugin_root/manifest.json")" = "$version"
+test "$(jq -r .name "$plugin_root/manifest.json")" = "FN sync"
+if find "$plugin_root" -type l -print -quit | grep -q .; then
   echo "plugin archive contains a symlink" >&2
   exit 1
 fi
-if find "$temp_dir" -type f \( -name '*.pyc' -o -path '*/__pycache__/*' \) -print -quit | grep -q .; then
+if find "$plugin_root" -type f \( -name '*.pyc' -o -path '*/__pycache__/*' \) -print -quit | grep -q .; then
   echo "plugin archive contains Python cache files" >&2
   exit 1
 fi
 
 if command -v omarchy >/dev/null 2>&1; then
-  omarchy plugin validate "$temp_dir"
+  omarchy plugin validate "$plugin_root"
 fi
 if command -v namcap >/dev/null 2>&1; then
   namcap_output=$(namcap "$package_path")

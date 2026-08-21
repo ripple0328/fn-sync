@@ -2,44 +2,86 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Nested-page navigation follows Omarchy's compact panel-header pattern:
-// one quiet icon action and one page title on the same visual line.
-Row {
+// Nested pages use a breadcrumb-style return target above the page title.
+// It reads as navigation, not as a competing primary action.
+Column {
     id: root
 
-    property string backText: ""
+    property string parentTitle: ""
+    property string backAccessibleText: parentTitle
     property string title: ""
     property color foreground: Color.foreground
+    property color dimForeground: foreground
     property color accent: Color.accent
     property string fontFamily: Style.font.family
 
     signal backRequested()
 
     width: parent ? parent.width : implicitWidth
-    spacing: Style.spacing.sm
+    spacing: Style.spacing.xs
 
-    PanelActionButton {
-        id: backButton
-        anchors.verticalCenter: parent.verticalCenter
-        iconText: "󰁍"
-        tooltipText: root.backText
-        foreground: root.foreground
-        hoverColor: root.accent
-        fontFamily: root.fontFamily
-        fontSize: Style.font.icon
-        size: Math.max(Style.space(30), Style.font.icon + Style.spacing.sm * 2)
-        focusable: true
-        bordered: false
+    BorderSurface {
+        id: backLink
+
+        width: Math.min(root.width, breadcrumb.implicitWidth + Style.spacing.md * 2)
+        implicitHeight: Math.max(Style.space(30), breadcrumb.implicitHeight + Style.spacing.xs * 2)
+        radius: Style.cornerRadius
+        activeFocusOnTab: true
+
+        readonly property bool hot: backMouse.containsMouse || activeFocus
+
+        color: hot ? Style.hoverFillFor(root.accent, root.accent) : "transparent"
+        borderSpec: activeFocus ? Border.controlSpec("focus", root.accent, root.accent) : Border.none()
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 60
+            }
+        }
+
+        Row {
+            id: breadcrumb
+            anchors.centerIn: parent
+            spacing: Style.spacing.xs
+
+            Text {
+                text: "←"
+                color: backLink.hot ? root.accent : root.dimForeground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+            }
+
+            Text {
+                text: root.parentTitle
+                color: backLink.hot ? root.accent : root.dimForeground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+            }
+        }
+
+        Keys.onReturnPressed: root.backRequested()
+        Keys.onEnterPressed: root.backRequested()
+        Keys.onSpacePressed: root.backRequested()
 
         Accessible.role: Accessible.Button
-        Accessible.name: root.backText
+        Accessible.name: root.backAccessibleText
 
-        onClicked: root.backRequested()
+        MouseArea {
+            id: backMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                backLink.forceActiveFocus();
+                root.backRequested();
+            }
+        }
     }
 
     Text {
-        width: Math.max(0, parent.width - backButton.width - parent.spacing)
-        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width
         text: root.title
         color: root.foreground
         font.family: root.fontFamily
