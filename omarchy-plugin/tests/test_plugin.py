@@ -79,6 +79,8 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn('install-dependencies)', control)
         self.assertIn('pkexec pacman -S --needed --noconfirm python rclone gjs gtk4 libsecret libnotify', control)
         self.assertIn('systemctl --user enable --now fnsync.service', control)
+        status_case = control.split('status)', 1)[1].split('bootstrap)', 1)[0]
+        self.assertIn('ensure_service', status_case)
         self.assertIn('FNSYNC_LANGUAGE="$language"', control)
 
     def test_standalone_plugin_contains_the_client_runtime(self):

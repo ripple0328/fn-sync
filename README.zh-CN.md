@@ -15,7 +15,7 @@
 应用显示名为 **FN sync**；系统界面语言为中文时显示为 **飞牛**。包名、命令和
 内部路径仍使用 `fn-sync`，以保持安装与脚本兼容。
 
-> 当前版本为 `0.9.0`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
+> 当前版本为 `0.9.1`。真实 fnOS 上的发现、授权、文件夹浏览和大型同步已经
 > 验证。Omarchy 面板只保留“任务 / 设置”两个主导航；连接等子页使用安静、跟随
 > 主题的面包屑返回导航，每个任务卡也只显示一次同步状态。首次试用仍建议从一个
 > 新建的小目录开始。
@@ -114,9 +114,9 @@ cd fn-sync
 
 构建产物位于 `dist/`：
 
-- `fn-sync-0.9.0-1-any.pkg.tar.zst`：Arch/pacman 系统包。
-- `fn-sync-omarchy-plugin-0.9.0.tar.gz`：自包含 Omarchy 插件归档。
-- `fn-sync-omarchy-bundle-0.9.0.tar.gz`：包含前两者和安装器的便携包。
+- `fn-sync-0.9.1-1-any.pkg.tar.zst`：Arch/pacman 系统包。
+- `fn-sync-omarchy-plugin-0.9.1.tar.gz`：自包含 Omarchy 插件归档。
+- `fn-sync-omarchy-bundle-0.9.1.tar.gz`：包含前两者和安装器的便携包。
 
 安装后，状态栏右侧会显示飞牛同步官方双环标记，并打开跟随当前 Omarchy 主题的
 统一面板。标记的前景色、强调色和错误色均实时绑定系统主题。面板只有“任务 /
