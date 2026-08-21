@@ -18,10 +18,10 @@ fake rclone process.
 | Access markers, pause-on-mismatch and explicit repair | `tests/test_core.py` |
 | Deletion guard, conflict copies, backup directories and task locks | `tests/test_core.py` |
 | Background enable/disable, sync-now, status and logs | `tests/test_cli_integration.py` |
-| Package contents, version consistency, desktop localization and services | `tests/test_distribution.py`, `scripts/verify-package.sh` |
+| Package contents, Arch/AUR template parity, release archive integrity, version consistency, desktop localization and services | `tests/test_distribution.py`, `scripts/verify-package.sh` |
 | Bundled Omarchy plugin installation, backup, service enable and bar enable | `tests/test_installer.py` |
 | Plugin manifest, QML parsing, discovery and official Omarchy validation | `omarchy-plugin/tests`, `scripts/ci.sh` |
-| README screenshots, CI gates, GitHub Release, gated AUR publish and plugin subtree publish | `tests/test_publishing.py` |
+| README screenshots, CI gates, GitHub Release, gated/manual AUR publish and plugin subtree publish | `tests/test_publishing.py` |
 
 ## Local checks
 
