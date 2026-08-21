@@ -95,6 +95,7 @@ class InstallerTests(unittest.TestCase):
             "PanelPageHeader.qml",
             "FnSyncIcon.qml",
             "README.md",
+            "README.zh-CN.md",
             "LICENSE",
             "preview.png",
             "assets/fn-sync-symbolic.png",

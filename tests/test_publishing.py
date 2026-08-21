@@ -9,7 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PublishingContractTests(unittest.TestCase):
     def test_documentation_images_are_present(self):
-        for readme in (ROOT / "README.md", ROOT / "omarchy-plugin" / "README.md"):
+        for readme in (
+            ROOT / "README.md",
+            ROOT / "README.zh-CN.md",
+            ROOT / "omarchy-plugin" / "README.md",
+            ROOT / "omarchy-plugin" / "README.zh-CN.md",
+        ):
             content = readme.read_text(encoding="utf-8")
             image_paths = re.findall(r"!\[[^]]*]\(([^)]+)\)", content)
             self.assertTrue(image_paths, f"{readme} should contain an interface image")
@@ -18,6 +23,21 @@ class PublishingContractTests(unittest.TestCase):
                     continue
                 resolved = readme.parent / image_path
                 self.assertTrue(resolved.is_file(), f"missing documentation image: {resolved}")
+
+    def test_readmes_default_to_english_and_link_simplified_chinese(self):
+        for directory, english_heading, chinese_heading in (
+            (ROOT, "## Architecture", "## 架构"),
+            (ROOT / "omarchy-plugin", "## Installation", "## 安装"),
+        ):
+            english = (directory / "README.md").read_text(encoding="utf-8")
+            chinese = (directory / "README.zh-CN.md").read_text(encoding="utf-8")
+            self.assertIn("<strong>English</strong>", english)
+            self.assertIn('href="./README.zh-CN.md"', english)
+            self.assertIn(english_heading, english)
+            self.assertIsNone(re.search(r"(?m)^#{1,6} .*[一-鿿]", english))
+            self.assertIn('href="./README.md"', chinese)
+            self.assertIn("<strong>简体中文</strong>", chinese)
+            self.assertIn(chinese_heading, chinese)
 
     def test_plugin_readme_documents_install_update_and_removal(self):
         readme = (ROOT / "omarchy-plugin" / "README.md").read_text(encoding="utf-8")

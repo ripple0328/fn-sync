@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 # FN sync for Omarchy
 
 FN sync is a theme-native Omarchy bar widget and management panel for syncing

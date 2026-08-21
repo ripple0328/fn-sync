@@ -38,10 +38,12 @@ package() {
   install -Dm755 omarchy-plugin/scripts/fn-syncctl "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl"
   install -Dm755 omarchy-plugin/scripts/fn_sync_discover.py "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn_sync_discover.py"
   install -Dm644 omarchy-plugin/README.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/README.md"
+  install -Dm644 omarchy-plugin/README.zh-CN.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/README.zh-CN.md"
   install -Dm644 omarchy-plugin/LICENSE "$pkgdir/usr/share/fn-sync/omarchy-plugin/LICENSE"
   install -Dm644 omarchy-plugin/preview.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/preview.png"
 
   install -Dm644 README.md "$pkgdir/usr/share/doc/fn-sync/README.md"
+  install -Dm644 README.zh-CN.md "$pkgdir/usr/share/doc/fn-sync/README.zh-CN.md"
   install -Dm644 docs/research.md "$pkgdir/usr/share/doc/fn-sync/research.md"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/fn-sync/LICENSE"
 }

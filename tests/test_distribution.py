@@ -56,6 +56,8 @@ class DistributionContractTests(unittest.TestCase):
                 "Panel.qml",
                 "PanelPageHeader.qml",
                 "FnSyncIcon.qml",
+                "README.md",
+                "README.zh-CN.md",
                 "LICENSE",
                 "preview.png",
                 "assets/fn-sync-symbolic.png",
@@ -84,8 +86,11 @@ class DistributionContractTests(unittest.TestCase):
             with tarfile.open(archive, "r:gz") as handle:
                 names = set(handle.getnames())
                 self.assertIn(f"{prefix}/VERSION", names)
+                self.assertIn(f"{prefix}/README.md", names)
+                self.assertIn(f"{prefix}/README.zh-CN.md", names)
                 self.assertIn(f"{prefix}/src/fnsync.py", names)
                 self.assertIn(f"{prefix}/omarchy-plugin/PanelPageHeader.qml", names)
+                self.assertIn(f"{prefix}/omarchy-plugin/README.zh-CN.md", names)
 
     def test_plugin_repository_contract_has_no_symlinks(self):
         plugin = ROOT / "omarchy-plugin"
