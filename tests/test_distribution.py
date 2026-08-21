@@ -48,6 +48,7 @@ class DistributionContractTests(unittest.TestCase):
             "manifest.json",
             "BarWidget.qml",
             "Panel.qml",
+            "PanelPageHeader.qml",
             "FnSyncIcon.qml",
             "LICENSE",
             "preview.png",

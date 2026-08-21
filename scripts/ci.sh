@@ -44,7 +44,7 @@ if [ -z "$qmlformat_bin" ] && [ -x /usr/lib/qt6/bin/qmlformat ]; then
   qmlformat_bin=/usr/lib/qt6/bin/qmlformat
 fi
 if [ -n "$qmlformat_bin" ]; then
-  for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/FnSyncIcon.qml; do
+  for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
     "$qmlformat_bin" "$qml" >/dev/null
   done
 elif [ "${CI:-}" = "true" ]; then

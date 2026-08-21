@@ -1349,49 +1349,14 @@ Panel {
                         width: parent.width
                         spacing: Style.spacing.lg
 
-                        Row {
+                        PanelPageHeader {
                             width: parent.width
-                            spacing: Style.spacing.sm
-
-                            PanelActionButton {
-                                id: backToSettingsButton
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: size
-                                height: size
-                                size: Style.space(32)
-                                iconText: "󰅁"
-                                tooltipText: root.l10n("Back to settings", "返回设置")
-                                focusable: true
-                                foreground: root.foreground
-                                fontFamily: root.fontFamily
-                                fontSize: Style.font.heading
-                                onClicked: root.showPrimary("settings")
-                            }
-
-                            Column {
-                                width: parent.width - backToSettingsButton.width - parent.spacing
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Style.spacing.xs
-
-                                Text {
-                                    width: parent.width
-                                    text: root.l10n("SETTINGS", "设置")
-                                    color: root.dimForeground
-                                    font.family: root.fontFamily
-                                    font.pixelSize: Style.font.caption
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    width: parent.width
-                                    text: root.l10n("NAS connections", "NAS 连接")
-                                    color: root.foreground
-                                    font.family: root.fontFamily
-                                    font.pixelSize: Style.font.heading
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                }
-                            }
+                            backText: root.l10n("Settings", "设置")
+                            title: root.l10n("NAS connections", "NAS 连接")
+                            foreground: root.foreground
+                            accent: root.accent
+                            fontFamily: root.fontFamily
+                            onBackRequested: root.showPrimary("settings")
                         }
 
                         PanelSectionHeader {
@@ -1684,29 +1649,14 @@ Panel {
                         width: parent.width
                         spacing: Style.spacing.lg
 
-                        Row {
+                        PanelPageHeader {
                             width: parent.width
-                            spacing: Style.spacing.sm
-                            PanelActionButton {
-                                iconText: "󰅁"
-                                tooltipText: root.l10n("Back to tasks", "返回任务")
-                                size: Style.space(32)
-                                fontSize: Style.font.heading
-                                focusable: true
-                                foreground: root.foreground
-                                fontFamily: root.fontFamily
-                                onClicked: root.showPrimary("tasks")
-                            }
-                            Text {
-                                width: parent.width - parent.children[0].width - parent.spacing
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.selectedTask ? String(root.selectedTask.name || root.l10n("Sync task", "同步任务")) : root.l10n("Sync task", "同步任务")
-                                color: root.foreground
-                                font.family: root.fontFamily
-                                font.pixelSize: Style.font.heading
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
+                            backText: root.l10n("Tasks", "任务")
+                            title: root.selectedTask ? String(root.selectedTask.name || root.l10n("Sync task", "同步任务")) : root.l10n("Sync task", "同步任务")
+                            foreground: root.foreground
+                            accent: root.accent
+                            fontFamily: root.fontFamily
+                            onBackRequested: root.showPrimary("tasks")
                         }
 
                         PanelSectionHeader {
@@ -2201,27 +2151,14 @@ Panel {
                         visible: root.page === "add-task"
                         width: parent.width
                         spacing: Style.spacing.lg
-                        Row {
+                        PanelPageHeader {
                             width: parent.width
-                            spacing: Style.spacing.sm
-                            PanelActionButton {
-                                iconText: "󰅁"
-                                tooltipText: root.l10n("Back to tasks", "返回任务")
-                                size: Style.space(32)
-                                fontSize: Style.font.heading
-                                focusable: true
-                                foreground: root.foreground
-                                fontFamily: root.fontFamily
-                                onClicked: root.showPrimary("tasks")
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.l10n("Create sync task", "创建同步任务")
-                                color: root.foreground
-                                font.family: root.fontFamily
-                                font.pixelSize: Style.font.heading
-                                font.bold: true
-                            }
+                            backText: root.l10n("Tasks", "任务")
+                            title: root.l10n("Create sync task", "创建同步任务")
+                            foreground: root.foreground
+                            accent: root.accent
+                            fontFamily: root.fontFamily
+                            onBackRequested: root.showPrimary("tasks")
                         }
                         Text {
                             width: parent.width
@@ -2391,27 +2328,14 @@ Panel {
                         visible: root.page === "remote-picker"
                         width: parent.width
                         spacing: Style.spacing.lg
-                        Row {
+                        PanelPageHeader {
                             width: parent.width
-                            spacing: Style.spacing.sm
-                            PanelActionButton {
-                                iconText: "󰅁"
-                                tooltipText: root.l10n("Back to task setup", "返回任务设置")
-                                size: Style.space(32)
-                                fontSize: Style.font.heading
-                                focusable: true
-                                foreground: root.foreground
-                                fontFamily: root.fontFamily
-                                onClicked: root.page = "add-task"
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.l10n("Choose NAS folder", "选择 NAS 文件夹")
-                                color: root.foreground
-                                font.family: root.fontFamily
-                                font.pixelSize: Style.font.heading
-                                font.bold: true
-                            }
+                            backText: root.l10n("Task setup", "任务设置")
+                            title: root.l10n("Choose NAS folder", "选择 NAS 文件夹")
+                            foreground: root.foreground
+                            accent: root.accent
+                            fontFamily: root.fontFamily
+                            onBackRequested: root.page = "add-task"
                         }
                         Text {
                             width: parent.width
@@ -2492,27 +2416,14 @@ Panel {
                         visible: root.page === "connection-form"
                         width: parent.width
                         spacing: Style.spacing.lg
-                        Row {
+                        PanelPageHeader {
                             width: parent.width
-                            spacing: Style.spacing.sm
-                            PanelActionButton {
-                                iconText: "󰅁"
-                                tooltipText: root.l10n("Back to saved connections", "返回已保存连接")
-                                size: Style.space(32)
-                                fontSize: Style.font.heading
-                                focusable: true
-                                foreground: root.foreground
-                                fontFamily: root.fontFamily
-                                onClicked: root.showPrimary("nas")
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.editingConnectionId === "" ? root.l10n("Connect NAS", "连接 NAS") : root.l10n("Edit NAS authorization", "编辑 NAS 授权")
-                                color: root.foreground
-                                font.family: root.fontFamily
-                                font.pixelSize: Style.font.heading
-                                font.bold: true
-                            }
+                            backText: root.l10n("NAS connections", "NAS 连接")
+                            title: root.editingConnectionId === "" ? root.l10n("Connect NAS", "连接 NAS") : root.l10n("Edit NAS authorization", "编辑 NAS 授权")
+                            foreground: root.foreground
+                            accent: root.accent
+                            fontFamily: root.fontFamily
+                            onBackRequested: root.showPrimary("nas")
                         }
                         Text {
                             width: parent.width

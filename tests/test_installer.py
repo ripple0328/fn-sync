@@ -91,6 +91,7 @@ class InstallerTests(unittest.TestCase):
             "manifest.json",
             "BarWidget.qml",
             "Panel.qml",
+            "PanelPageHeader.qml",
             "FnSyncIcon.qml",
             "README.md",
             "LICENSE",
