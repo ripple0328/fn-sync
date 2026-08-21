@@ -42,6 +42,21 @@ Use only one method. Update a bundled installation with
 omarchy plugin update community.fnos-sync --yes
 ```
 
+## Removal
+
+Remove the Omarchy panel first. If the system client is no longer needed,
+stop its user service before removing the package:
+
+```bash
+omarchy plugin remove community.fnos-sync --yes
+systemctl --user disable --now fnsync.service
+omarchy pkg drop fn-sync
+```
+
+Removing the plugin or package does not delete either synchronized folder.
+The user's task configuration and logs remain under the normal XDG config and
+state directories unless the user removes them separately.
+
 The plugin uses Omarchy's `Color`, `Style`, `BorderSurface`, `KeyboardPanel`,
 `Button`, `TextField`, `Dropdown`, and `Toggle` components so it follows the
 active theme automatically.
