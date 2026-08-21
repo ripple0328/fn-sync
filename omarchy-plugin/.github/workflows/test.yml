@@ -35,7 +35,7 @@ jobs:
 
       - name: Parse QML sources
         run: |
-          for qml in BarWidget.qml Panel.qml FnSyncIcon.qml; do
+          for qml in BarWidget.qml Panel.qml PanelPageHeader.qml FnSyncIcon.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
 

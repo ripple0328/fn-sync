@@ -101,7 +101,7 @@ jobs:
         run: /tmp/omarchy-plugin-validate omarchy-plugin
       - name: Parse QML
         run: |
-          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/FnSyncIcon.qml; do
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
 

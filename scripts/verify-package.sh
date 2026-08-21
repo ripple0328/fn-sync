@@ -27,6 +27,7 @@ for expected in \
   usr/share/fn-sync/omarchy-plugin/manifest.json \
   usr/share/fn-sync/omarchy-plugin/BarWidget.qml \
   usr/share/fn-sync/omarchy-plugin/Panel.qml \
+  usr/share/fn-sync/omarchy-plugin/PanelPageHeader.qml \
   usr/share/fn-sync/omarchy-plugin/LICENSE \
   usr/share/fn-sync/omarchy-plugin/preview.png \
   usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl; do

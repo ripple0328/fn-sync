@@ -33,13 +33,18 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn('root.showPrimary("settings")', panel)
         self.assertNotIn('title: "fn-sync"', panel)
 
-    def test_subpages_use_quiet_icon_navigation(self):
+    def test_subpages_use_contextual_theme_native_navigation(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+        header = (ROOT / "PanelPageHeader.qml").read_text(encoding="utf-8")
         self.assertNotIn('text: root.l10n("Back", "返回")', panel)
-        self.assertEqual(panel.count('iconText: "󰅁"'), 5)
-        self.assertEqual(panel.count("size: Style.space(32)"), 5)
-        self.assertIn('tooltipText: root.l10n("Back to settings", "返回设置")', panel)
-        self.assertIn('tooltipText: root.l10n("Back to tasks", "返回任务")', panel)
+        self.assertEqual(panel.count("PanelPageHeader {"), 5)
+        self.assertNotIn('iconText: "󰅁"', panel)
+        self.assertIn('backText: root.l10n("Settings", "设置")', panel)
+        self.assertIn('backText: root.l10n("Tasks", "任务")', panel)
+        self.assertIn('text: "\\u2039"', header)
+        self.assertIn("Style.hoverFillFor(root.foreground, root.accent)", header)
+        self.assertIn("Accessible.role: Accessible.Button", header)
+        self.assertIn("activeFocusOnTab: true", header)
 
     def test_optional_task_state_is_always_a_boolean(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")

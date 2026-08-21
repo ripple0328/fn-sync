@@ -12,7 +12,7 @@ conflicts=('fnsync')
 replaces=('fnsync')
 install=fn-sync.install
 source=("$pkgname-$pkgver.tar.gz")
-sha256sums=('3ed413638359da6388bb45abc2a36f38ce646107ea988da89c8c5d8b1ecdf08b')
+sha256sums=('15b68e89921efc44ff76ea8909f49942df6b4d1e508ebd40071f02da4c2fc0a6')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
@@ -31,6 +31,7 @@ package() {
   install -Dm644 omarchy-plugin/manifest.json "$pkgdir/usr/share/fn-sync/omarchy-plugin/manifest.json"
   install -Dm644 omarchy-plugin/BarWidget.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/BarWidget.qml"
   install -Dm644 omarchy-plugin/Panel.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/Panel.qml"
+  install -Dm644 omarchy-plugin/PanelPageHeader.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/PanelPageHeader.qml"
   install -Dm644 omarchy-plugin/FnSyncIcon.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/FnSyncIcon.qml"
   install -Dm644 omarchy-plugin/assets/fn-sync-symbolic.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/assets/fn-sync-symbolic.png"
   install -Dm755 omarchy-plugin/scripts/fn-syncctl "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl"
