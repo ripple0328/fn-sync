@@ -41,18 +41,20 @@ class PublishingContractTests(unittest.TestCase):
 
     def test_plugin_readme_documents_install_update_and_removal(self):
         readme = (ROOT / "omarchy-plugin" / "README.md").read_text(encoding="utf-8")
+        normalized = " ".join(readme.split())
         for required in (
             "## Installation",
-            "fn-sync-omarchy-setup",
+            "omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --yes",
+            "only FN Sync installation command required on Omarchy",
+            "without an AUR package or a second terminal command",
             "omarchy plugin update community.fnos-sync --yes",
             "## Removal",
             "omarchy plugin remove community.fnos-sync --yes",
             "systemctl --user disable --now fnsync.service",
-            "omarchy pkg drop fn-sync",
             "does not delete either synchronized folder",
             "task configuration and logs remain",
         ):
-            self.assertIn(required, readme)
+            self.assertIn(required, normalized)
 
     def test_ci_enforces_lint_transfer_and_package_gates(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

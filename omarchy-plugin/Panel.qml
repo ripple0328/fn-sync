@@ -19,6 +19,9 @@ Panel {
     property string language: "en"
     property string languagePreference: "system"
     property bool installed: false
+    property bool runtimeReady: false
+    property string missingDependencies: ""
+    property bool installingDependencies: false
     property var tasks: []
     property var connections: []
     property string statusError: ""
@@ -83,16 +86,16 @@ Panel {
     readonly property color dimForeground: Qt.darker(foreground, 1.5)
     readonly property color urgent: bar ? bar.urgent : Color.urgent
     readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-    readonly property bool busy: actionProcess.running || createProcess.running || verifyProcess.running || folderProcess.running || syncing
+    readonly property bool busy: actionProcess.running || createProcess.running || verifyProcess.running || folderProcess.running || syncing || installingDependencies
     readonly property bool connectionVerifying: verifyProcess.running
     readonly property bool connectionSaving: createProcess.running && createKind === "connection"
     readonly property bool connectionDiscovering: discoveryProcess.running
     readonly property bool connectionFormBusy: createProcess.running || verifyProcess.running
     readonly property bool connectionFieldsComplete: connectionNameField.text.trim() !== "" && connectionUrlField.text.trim() !== "" && connectionUserField.text.trim() !== "" && (editingConnectionId !== "" || connectionPasswordField.text !== "")
-    readonly property bool connectionSaveReady: installed && !connectionFormBusy && connectionFieldsComplete && (editingConnectionId !== "" || verifiedConnectionFingerprint === connectionFingerprint())
+    readonly property bool connectionSaveReady: installed && runtimeReady && !connectionFormBusy && connectionFieldsComplete && (editingConnectionId !== "" || verifiedConnectionFingerprint === connectionFingerprint())
     readonly property int runningTaskCount: countTaskState("running")
-    readonly property bool syncAllReady: installed && enabledCount() > 0 && runningTaskCount === 0 && !busy
-    readonly property bool createTaskReady: installed && connections.length > 0 && !busy
+    readonly property bool syncAllReady: installed && runtimeReady && enabledCount() > 0 && runningTaskCount === 0 && !busy
+    readonly property bool createTaskReady: installed && runtimeReady && connections.length > 0 && !busy
     readonly property var selectedTask: taskById(selectedTaskId)
     readonly property bool previewRunning: actionProcess.running && actionKind === "preview"
     readonly property bool primaryPage: page === "tasks" || page === "nas" || page === "settings"
@@ -1106,7 +1109,11 @@ Panel {
                         visible: root.primaryPage
                         width: parent.width
                         title: root.l10n("FN sync", "飞牛")
-                        meta: !root.installed ? root.l10n("Linux service not installed", "尚未安装 Linux 服务") : root.l10n(root.tasks.length + " tasks · " + root.connections.length + " NAS connections", root.tasks.length + " 个任务 · " + root.connections.length + " 个 NAS 连接")
+                        meta: !root.installed
+                            ? root.l10n("Plugin runtime missing", "插件运行组件缺失")
+                            : !root.runtimeReady
+                                ? root.l10n("One-time setup required", "需要完成一次设置")
+                                : root.l10n(root.tasks.length + " tasks · " + root.connections.length + " NAS connections", root.tasks.length + " 个任务 · " + root.connections.length + " 个 NAS 连接")
                         foreground: root.foreground
                         fontFamily: root.fontFamily
                         iconComponent: Component {
@@ -1143,8 +1150,71 @@ Panel {
                         }
                     }
 
+                    BorderSurface {
+                        visible: root.primaryPage && (!root.installed || !root.runtimeReady)
+                        width: parent.width
+                        implicitHeight: setupContent.implicitHeight + Style.spacing.xl * 2
+                        color: Util.alpha(root.accent, 0.13)
+                        borderSpec: Border.flat(root.accent, Style.focusBorderWidth)
+                        radius: Style.cornerRadius
+
+                        Column {
+                            id: setupContent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: Style.spacing.rowPaddingX
+                            anchors.rightMargin: Style.spacing.rowPaddingX
+                            spacing: Style.spacing.md
+
+                            Text {
+                                width: parent.width
+                                text: root.installed ? root.l10n("Finish FN Sync setup", "完成飞牛设置") : root.l10n("FN Sync needs to be reinstalled", "需要重新安装飞牛")
+                                color: root.foreground
+                                font.family: root.fontFamily
+                                font.pixelSize: Style.font.subtitle
+                                font.bold: true
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: root.installed
+                                    ? root.l10n("The client is already included in this plugin. Authorize the required Arch components once to enable file transfer and the desktop client.", "客户端已包含在插件中。只需授权安装所需的 Arch 组件，即可启用文件传输和桌面客户端。")
+                                    : root.l10n("The plugin checkout does not contain its bundled client. Update or reinstall the plugin.", "插件目录中没有内置客户端，请更新或重新安装插件。")
+                                color: root.dimForeground
+                                font.family: root.fontFamily
+                                font.pixelSize: Style.font.body
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                visible: root.statusError !== ""
+                                width: parent.width
+                                text: root.statusError
+                                color: root.urgent
+                                font.family: root.fontFamily
+                                font.pixelSize: Style.font.caption
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Button {
+                                visible: root.installed
+                                width: parent.width
+                                text: root.installingDependencies ? root.l10n("Installing required components…", "正在安装所需组件…") : root.l10n("Install required components", "安装所需组件")
+                                bordered: true
+                                focusable: true
+                                enabled: !root.installingDependencies
+                                opacity: enabled ? 1.0 : 0.55
+                                foreground: root.foreground
+                                fontFamily: root.fontFamily
+                                onClicked: if (root.hostWidget)
+                                    root.hostWidget.installDependencies()
+                            }
+                        }
+                    }
+
                     Column {
-                        visible: root.page === "tasks"
+                        visible: root.page === "tasks" && root.runtimeReady
                         width: parent.width
                         spacing: Style.spacing.lg
 
@@ -1191,7 +1261,7 @@ Panel {
                         Text {
                             visible: root.tasks.length === 0
                             width: parent.width
-                            text: !root.installed ? root.l10n("Install the fn-sync system package, then reload the plugin.", "请安装 fn-sync 系统包，然后重新加载插件。") : root.connections.length === 0 ? root.l10n("Open Settings and connect a NAS once, then create as many tasks as you need.", "请在设置中连接一次 NAS，然后按需创建多个任务。") : root.l10n("No tasks yet. Create the first task with a saved NAS connection.", "尚无任务。请使用已保存的 NAS 连接创建第一个任务。")
+                            text: root.connections.length === 0 ? root.l10n("Open Settings and connect a NAS once, then create as many tasks as you need.", "请在设置中连接一次 NAS，然后按需创建多个任务。") : root.l10n("No tasks yet. Create the first task with a saved NAS connection.", "尚无任务。请使用已保存的 NAS 连接创建第一个任务。")
                             color: root.dimForeground
                             font.family: root.fontFamily
                             font.pixelSize: Style.font.body
@@ -1345,7 +1415,7 @@ Panel {
                     }
 
                     Column {
-                        visible: root.page === "nas"
+                        visible: root.page === "nas" && root.runtimeReady
                         width: parent.width
                         spacing: Style.spacing.lg
 
@@ -1514,7 +1584,7 @@ Panel {
                     }
 
                     Column {
-                        visible: root.page === "settings"
+                        visible: root.page === "settings" && root.runtimeReady
                         width: parent.width
                         spacing: Style.spacing.lg
 

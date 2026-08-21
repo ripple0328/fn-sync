@@ -4,6 +4,8 @@ set -eu
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
 
+./scripts/sync-plugin-runtime.sh
+
 python3 -m compileall -q src tests omarchy-plugin/scripts omarchy-plugin/tests
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s omarchy-plugin/tests -v
@@ -28,6 +30,7 @@ scripts/install-omarchy-plugin.sh
 scripts/install.sh
 scripts/prepare-aur.sh
 scripts/release-source.sh
+scripts/sync-plugin-runtime.sh
 scripts/verify-package.sh
 omarchy-plugin/scripts/fn-syncctl
 "

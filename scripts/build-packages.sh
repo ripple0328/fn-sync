@@ -13,6 +13,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+"$project_dir/scripts/sync-plugin-runtime.sh"
+
 mkdir -p "$source_root" "$dist_dir"
 for item in VERSION LICENSE README.md README.zh-CN.md assets bin docs omarchy-plugin scripts src ui; do
   cp -a "$project_dir/$item" "$source_root/$item"

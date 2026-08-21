@@ -100,6 +100,9 @@ class DistributionContractTests(unittest.TestCase):
         for entry_point in manifest["entryPoints"].values():
             self.assertTrue((plugin / entry_point).is_file())
         self.assertFalse(any(path.is_symlink() for path in plugin.rglob("*")))
+        self.assertTrue((plugin / "runtime" / "fnsync.py").is_file())
+        self.assertTrue((plugin / "runtime" / "ui" / "app.js").is_file())
+        self.assertTrue((plugin / "runtime" / "fnsync.service").is_file())
 
     def test_services_launch_the_stable_command(self):
         packaged = (ROOT / "packaging" / "fnsync.service").read_text(encoding="utf-8")

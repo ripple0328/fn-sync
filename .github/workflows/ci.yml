@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Assemble the standalone plugin runtime
+        run: ./scripts/sync-plugin-runtime.sh
       - name: Install lint and coverage tools
         run: python -m pip install --disable-pip-version-check coverage ruff
       - name: Lint Python
@@ -65,6 +67,7 @@ jobs:
             scripts/install.sh \
             scripts/prepare-aur.sh \
             scripts/release-source.sh \
+            scripts/sync-plugin-runtime.sh \
             scripts/verify-package.sh \
             omarchy-plugin/scripts/fn-syncctl
 
@@ -99,7 +102,9 @@ jobs:
             --output /tmp/omarchy-plugin-validate
           chmod +x /tmp/omarchy-plugin-validate
       - name: Validate plugin manifest
-        run: /tmp/omarchy-plugin-validate omarchy-plugin
+        run: |
+          ./scripts/sync-plugin-runtime.sh
+          /tmp/omarchy-plugin-validate omarchy-plugin
       - name: Parse QML
         run: |
           for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
