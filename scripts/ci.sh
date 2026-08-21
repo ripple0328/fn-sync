@@ -11,7 +11,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s omarchy-plugin/tests -v
 
 if command -v ruff >/dev/null 2>&1; then
-  ruff check src tests omarchy-plugin/scripts omarchy-plugin/tests
+  ruff check --no-cache src tests omarchy-plugin/scripts omarchy-plugin/tests
 elif [ "${CI:-}" = "true" ]; then
   echo "ruff is required in CI" >&2
   exit 1

@@ -268,12 +268,13 @@ the same local Linux directory at the same time.
 
 ## Validation
 
-- 74 automated tests cover real WebDAV two-way/one-way transfers, complete CLI
+- 91 automated tests cover real WebDAV two-way/one-way transfers, complete CLI
   connection and task lifecycles, streamed progress and silent timeouts,
   background scheduling, Secret Service, LAN discovery, the one-step installer
   sandbox, packaged-controller startup, release-source integrity,
   package/publishing contracts, bilingual documentation, and standalone plugin
-  tests. Combined Python line-and-branch coverage is gated at 80%.
+  tests. Combined Python line-and-branch coverage is gated at 85%; the current
+  suite measures 87%.
 - The Omarchy 4.0 plugin manifest and QML syntax pass validation.
 - The pacman package, standalone plugin archive, and portable bundle pass
   structural verification.

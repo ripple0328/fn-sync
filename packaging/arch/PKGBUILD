@@ -12,7 +12,7 @@ conflicts=('fnsync')
 replaces=('fnsync')
 install=fn-sync.install
 source=("$pkgname-$pkgver.tar.gz")
-sha256sums=('cd7c981d25c7e1a52f0a4d9f3e27ffb1b79091c853f8c71ffc9239f914993974')
+sha256sums=('8c56f0cd32bb8e95ddbb57e64af5042774cdf650c546287baaac032a75915de5')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
