@@ -25,6 +25,12 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env \
+            RELEASE_TAG="$RELEASE_TAG" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            sh -eu <<'EOF'
           release_tag="$RELEASE_TAG"
           version=${release_tag#v}
           test "$release_tag" = "v$version"
@@ -39,6 +45,7 @@ jobs:
           ./scripts/prepare-aur.sh "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync"
           cd dist/aur/fn-sync
           makepkg --verifysource
+          EOF
       - name: Configure AUR SSH access
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
