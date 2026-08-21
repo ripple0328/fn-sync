@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SETUP = ROOT / "scripts" / "fn-sync-omarchy-setup"
 PLUGIN = ROOT / "omarchy-plugin"
+BUNDLE_SETUP = ROOT / "scripts" / "install-omarchy-bundle.sh"
 
 
 class InstallerTests(unittest.TestCase):
@@ -137,6 +138,60 @@ class InstallerTests(unittest.TestCase):
             ],
             calls,
         )
+
+    def test_bundle_installer_adds_dependencies_package_and_plugin_in_one_run(self):
+        bundle = self.root / "bundle"
+        (bundle / "scripts").mkdir(parents=True)
+        (bundle / "dist").mkdir()
+        (bundle / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        installer = bundle / "scripts" / BUNDLE_SETUP.name
+        installer.write_text(BUNDLE_SETUP.read_text(encoding="utf-8"), encoding="utf-8")
+        installer.chmod(0o755)
+        package = bundle / "dist" / "fn-sync-9.9.9-1-any.pkg.tar.zst"
+        package.write_bytes(b"package")
+        self._write_fake(
+            "sudo",
+            """
+            #!/usr/bin/env python3
+            import json, os, sys
+            with open(os.environ["FNSYNC_TEST_CALLS"], "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(["sudo", *sys.argv[1:]]) + "\\n")
+            raise SystemExit(0)
+            """,
+        )
+        self._write_fake(
+            "fn-sync-omarchy-setup",
+            """
+            #!/usr/bin/env python3
+            import json, os, sys
+            with open(os.environ["FNSYNC_TEST_CALLS"], "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(["fn-sync-omarchy-setup", *sys.argv[1:]]) + "\\n")
+            raise SystemExit(0)
+            """,
+        )
+
+        result = subprocess.run(
+            [str(installer)],
+            text=True,
+            capture_output=True,
+            env=self.env,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = [
+            json.loads(line)
+            for line in self.calls.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertIn(
+            ["omarchy", "pkg", "add", "rclone", "python", "gjs", "gtk4", "libsecret", "libnotify"],
+            calls,
+        )
+        self.assertIn(
+            ["sudo", "pacman", "-U", "--needed", "--noconfirm", str(package)],
+            calls,
+        )
+        self.assertIn(["fn-sync-omarchy-setup", "--update"], calls)
 
 
 if __name__ == "__main__":

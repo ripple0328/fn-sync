@@ -79,6 +79,7 @@ jobs:
             --workdir /repo \
             rhysd/actionlint:1.7.12 \
             .github/workflows/ci.yml \
+            .github/workflows/publish-aur.yml \
             .github/workflows/publish-plugin.yml \
             .github/workflows/release.yml \
             omarchy-plugin/.github/workflows/test.yml

@@ -1351,9 +1351,11 @@ Panel {
 
                         PanelPageHeader {
                             width: parent.width
-                            backText: root.l10n("Back to Settings", "返回设置")
+                            parentTitle: root.l10n("Settings", "设置")
+                            backAccessibleText: root.l10n("Back to Settings", "返回设置")
                             title: root.l10n("NAS connections", "NAS 连接")
                             foreground: root.foreground
+                            dimForeground: root.dimForeground
                             accent: root.accent
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("settings")
@@ -1651,9 +1653,11 @@ Panel {
 
                         PanelPageHeader {
                             width: parent.width
-                            backText: root.l10n("Back to Tasks", "返回任务")
+                            parentTitle: root.l10n("Tasks", "任务")
+                            backAccessibleText: root.l10n("Back to Tasks", "返回任务")
                             title: root.selectedTask ? String(root.selectedTask.name || root.l10n("Sync task", "同步任务")) : root.l10n("Sync task", "同步任务")
                             foreground: root.foreground
+                            dimForeground: root.dimForeground
                             accent: root.accent
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("tasks")
@@ -2153,9 +2157,11 @@ Panel {
                         spacing: Style.spacing.lg
                         PanelPageHeader {
                             width: parent.width
-                            backText: root.l10n("Back to Tasks", "返回任务")
+                            parentTitle: root.l10n("Tasks", "任务")
+                            backAccessibleText: root.l10n("Back to Tasks", "返回任务")
                             title: root.l10n("Create sync task", "创建同步任务")
                             foreground: root.foreground
+                            dimForeground: root.dimForeground
                             accent: root.accent
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("tasks")
@@ -2330,9 +2336,11 @@ Panel {
                         spacing: Style.spacing.lg
                         PanelPageHeader {
                             width: parent.width
-                            backText: root.l10n("Back to task setup", "返回任务设置")
+                            parentTitle: root.l10n("Task setup", "任务设置")
+                            backAccessibleText: root.l10n("Back to task setup", "返回任务设置")
                             title: root.l10n("Choose NAS folder", "选择 NAS 文件夹")
                             foreground: root.foreground
+                            dimForeground: root.dimForeground
                             accent: root.accent
                             fontFamily: root.fontFamily
                             onBackRequested: root.page = "add-task"
@@ -2418,9 +2426,11 @@ Panel {
                         spacing: Style.spacing.lg
                         PanelPageHeader {
                             width: parent.width
-                            backText: root.l10n("Back to NAS connections", "返回 NAS 连接")
+                            parentTitle: root.l10n("NAS connections", "NAS 连接")
+                            backAccessibleText: root.l10n("Back to NAS connections", "返回 NAS 连接")
                             title: root.editingConnectionId === "" ? root.l10n("Connect NAS", "连接 NAS") : root.l10n("Edit NAS authorization", "编辑 NAS 授权")
                             foreground: root.foreground
+                            dimForeground: root.dimForeground
                             accent: root.accent
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("nas")

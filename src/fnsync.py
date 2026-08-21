@@ -16,12 +16,14 @@ import fcntl
 import getpass
 import json
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Iterator, Sequence
@@ -31,7 +33,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 APP_NAME = "fnsync"
-APP_VERSION = "0.8.1"
+APP_VERSION = "0.8.2"
 CONFIG_VERSION = 2
 MIN_RCLONE_VERSION = (1, 66, 0)
 MODES = ("two-way", "upload-only", "download-only")
@@ -802,29 +804,53 @@ def run_streaming(command: list[str], timeout: int) -> tuple[subprocess.Complete
     )
     assert process.stdout is not None
     previous_sigterm = signal.getsignal(signal.SIGTERM)
+    stream: queue.Queue[str | None] = queue.Queue()
+
+    def read_stream() -> None:
+        try:
+            for line in process.stdout:
+                stream.put(line)
+        finally:
+            stream.put(None)
+
+    reader = threading.Thread(target=read_stream, name="fn-sync-output", daemon=True)
+    reader.start()
 
     def interrupt_stream(_signum: int, _frame: Any) -> None:
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupt_stream)
     timed_out = False
+
+    def forward(line: str) -> None:
+        clean = sanitize_output(line)
+        chunks.append(clean)
+        # Let ordinary per-file dry-run lines use normal pipe buffering.
+        # Flush stats and failures immediately so the panel stays live
+        # without forcing one system call for every planned file.
+        flush_progress = bool(
+            "ERROR :" in clean
+            or "Failed to" in clean
+            or re.search(r"NOTICE:.*\s/\s.*%", clean)
+        )
+        print(clean, end="", flush=flush_progress)
+
     try:
-        for line in process.stdout:
-            clean = sanitize_output(line)
-            chunks.append(clean)
-            # Let ordinary per-file dry-run lines use normal pipe buffering.
-            # Flush stats and failures immediately so the panel stays live
-            # without forcing one system call for every planned file.
-            flush_progress = bool(
-                "ERROR :" in clean
-                or "Failed to" in clean
-                or re.search(r"NOTICE:.*\s/\s.*%", clean)
-            )
-            print(clean, end="", flush=flush_progress)
-            if time.monotonic() - started > timeout:
+        while True:
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0 and process.poll() is None:
                 timed_out = True
                 process.terminate()
                 break
+            try:
+                line = stream.get(timeout=max(0.01, min(0.2, max(0.0, remaining))))
+            except queue.Empty:
+                if process.poll() is not None and not reader.is_alive():
+                    break
+                continue
+            if line is None:
+                break
+            forward(line)
         if timed_out:
             try:
                 process.wait(timeout=5)
@@ -842,6 +868,14 @@ def run_streaming(command: list[str], timeout: int) -> tuple[subprocess.Complete
             process.wait()
         raise
     finally:
+        reader.join(timeout=1)
+        while True:
+            try:
+                remaining_line = stream.get_nowait()
+            except queue.Empty:
+                break
+            if remaining_line is not None:
+                forward(remaining_line)
         process.stdout.close()
         signal.signal(signal.SIGTERM, previous_sigterm)
     output = "".join(chunks)

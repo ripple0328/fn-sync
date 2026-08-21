@@ -36,6 +36,7 @@ class PublishingContractTests(unittest.TestCase):
             "ruff check",
             "shellcheck",
             "rhysd/actionlint:1.7.12",
+            ".github/workflows/publish-aur.yml",
             "tests.test_rclone_e2e",
             "./scripts/build-packages.sh",
             "./scripts/verify-package.sh",
