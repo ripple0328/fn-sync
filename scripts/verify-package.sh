@@ -33,9 +33,13 @@ for expected in \
   usr/share/fn-sync/omarchy-plugin/BarWidget.qml \
   usr/share/fn-sync/omarchy-plugin/Panel.qml \
   usr/share/fn-sync/omarchy-plugin/PanelPageHeader.qml \
+  usr/share/fn-sync/omarchy-plugin/README.md \
+  usr/share/fn-sync/omarchy-plugin/README.zh-CN.md \
   usr/share/fn-sync/omarchy-plugin/LICENSE \
   usr/share/fn-sync/omarchy-plugin/preview.png \
-  usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl; do
+  usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl \
+  usr/share/doc/fn-sync/README.md \
+  usr/share/doc/fn-sync/README.zh-CN.md; do
   printf '%s\n' "$contents" | grep -Fxq "$expected" || {
     echo "package is missing $expected" >&2
     exit 1
@@ -73,6 +77,8 @@ tar -xzf "$plugin_archive" -C "$plugin_root"
 test -f "$plugin_root/manifest.json"
 test -f "$plugin_root/LICENSE"
 test -f "$plugin_root/preview.png"
+test -f "$plugin_root/README.md"
+test -f "$plugin_root/README.zh-CN.md"
 test "$(jq -r .version "$plugin_root/manifest.json")" = "$version"
 test "$(jq -r .name "$plugin_root/manifest.json")" = "FN sync"
 if find "$plugin_root" -type l -print -quit | grep -q .; then

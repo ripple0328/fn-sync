@@ -74,7 +74,7 @@ install -m644 "$source_dir/FnSyncIcon.qml" "$stage_dir/FnSyncIcon.qml"
 install -m644 "$source_dir/assets/fn-sync-symbolic.png" "$stage_dir/assets/fn-sync-symbolic.png"
 install -m755 "$source_dir/scripts/fn-syncctl" "$stage_dir/scripts/fn-syncctl"
 install -m755 "$source_dir/scripts/fn_sync_discover.py" "$stage_dir/scripts/fn_sync_discover.py"
-for documentation in README.md LICENSE preview.png; do
+for documentation in README.md README.zh-CN.md LICENSE preview.png; do
   if [ -f "$source_dir/$documentation" ]; then
     install -m644 "$source_dir/$documentation" "$stage_dir/$documentation"
   fi
