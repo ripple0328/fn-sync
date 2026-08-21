@@ -17,7 +17,7 @@ The application is displayed as **FN sync**, or **飞牛** when the system
 interface language is Chinese. The package name, command, and internal paths
 remain `fn-sync` for installation and script compatibility.
 
-> The current version is `0.9.0`. Discovery, authorization, folder browsing,
+> The current version is `0.9.1`. Discovery, authorization, folder browsing,
 > and large transfers have been validated against a real fnOS NAS. The Omarchy
 > panel has only two top-level destinations, **Tasks** and **Settings**.
 > Connection pages use quiet, theme-aware breadcrumb navigation, and each task
@@ -136,9 +136,9 @@ only when invoking pacman:
 
 Artifacts are written to `dist/`:
 
-- `fn-sync-0.9.0-1-any.pkg.tar.zst`: Arch/pacman system package.
-- `fn-sync-omarchy-plugin-0.9.0.tar.gz`: self-contained Omarchy plugin.
-- `fn-sync-omarchy-bundle-0.9.0.tar.gz`: portable bundle containing both
+- `fn-sync-0.9.1-1-any.pkg.tar.zst`: Arch/pacman system package.
+- `fn-sync-omarchy-plugin-0.9.1.tar.gz`: self-contained Omarchy plugin.
+- `fn-sync-omarchy-bundle-0.9.1.tar.gz`: portable bundle containing both
   packages and the installer.
 
 After installation, the official double-loop FN Sync mark appears on the right

@@ -61,7 +61,10 @@ ensure_service() {
     install -m 0644 "$service_source" "$unit"
     systemctl --user daemon-reload
   fi
-  systemctl --user enable --now fnsync.service >/dev/null
+  if ! systemctl --user is-enabled --quiet fnsync.service 2>/dev/null \
+    || ! systemctl --user is-active --quiet fnsync.service 2>/dev/null; then
+    systemctl --user enable --now fnsync.service >/dev/null
+  fi
 }
 
 bootstrap() {
@@ -90,6 +93,11 @@ case "${1:-status}" in
         "$client_distribution" "$missing"
       exit 0
     fi
+    # The Omarchy plugin installer cannot run lifecycle hooks. Status refreshes
+    # are guaranteed for an enabled bar widget, so use them as a second,
+    # idempotent bootstrap path if the one-shot QML timer is skipped during a
+    # live plugin reload.
+    ensure_service
     output=$(FNSYNC_LANGUAGE="$language" run_client status --json 2>&1) || {
       python3 -c 'import json,sys; print(json.dumps({"installed": True, "ready": True, "distribution": sys.argv[1], "missing_dependencies": "", "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' "$client_distribution" <<EOF
 $output
