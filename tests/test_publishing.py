@@ -17,6 +17,19 @@ class PublishingContractTests(unittest.TestCase):
                 resolved = readme.parent / image_path
                 self.assertTrue(resolved.is_file(), f"missing documentation image: {resolved}")
 
+    def test_plugin_readme_documents_install_update_and_removal(self):
+        readme = (ROOT / "omarchy-plugin" / "README.md").read_text(encoding="utf-8")
+        for required in (
+            "## Installation",
+            "fn-sync-omarchy-setup",
+            "omarchy plugin update community.fnos-sync --yes",
+            "## Removal",
+            "omarchy plugin remove community.fnos-sync --yes",
+            "systemctl --user disable --now fnsync.service",
+            "omarchy pkg drop fn-sync",
+        ):
+            self.assertIn(required, readme)
+
     def test_ci_enforces_lint_transfer_and_package_gates(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         for required in (
