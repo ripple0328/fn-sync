@@ -51,4 +51,7 @@ jobs:
           git commit --message "Bundle FN Sync runtime for plugin release"
           git subtree split --prefix=omarchy-plugin --branch=plugin-release
           git remote add plugin git@github.com:ripple0328/omarchy-fn-sync.git
-          git push plugin plugin-release:main
+          git fetch plugin main
+          plugin_main=$(git rev-parse refs/remotes/plugin/main)
+          git push --force-with-lease=refs/heads/main:"$plugin_main" \
+            plugin plugin-release:main
