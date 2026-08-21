@@ -74,6 +74,9 @@ class PublishingContractTests(unittest.TestCase):
             "releases/download/$release_tag/fn-sync-$version.tar.gz",
             "tar -tzf",
             "./scripts/prepare-aur.sh",
+            'useradd --create-home builder',
+            'chown -R builder:builder "$GITHUB_WORKSPACE"',
+            "runuser -u builder",
             "makepkg --verifysource",
             "git push origin master",
         ):
