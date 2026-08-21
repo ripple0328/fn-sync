@@ -157,7 +157,8 @@ class PublishingContractTests(unittest.TestCase):
             "omarchy-plugin/PanelPageHeader.qml",
             "git subtree split --prefix=omarchy-plugin",
             "ripple0328/omarchy-fn-sync.git",
-            "git push plugin plugin-release:main",
+            "git fetch plugin main",
+            'git push --force-with-lease=refs/heads/main:"$plugin_main"',
         ):
             self.assertIn(required, workflow)
 
