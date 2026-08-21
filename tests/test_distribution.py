@@ -33,12 +33,14 @@ class DistributionContractTests(unittest.TestCase):
 
     def test_package_keeps_cli_name_but_localizes_display_name(self):
         desktop = (ROOT / "packaging" / "fnsync.desktop").read_text(encoding="utf-8")
+        app = (ROOT / "ui" / "app.js").read_text(encoding="utf-8")
         manifest = json.loads(
             (ROOT / "omarchy-plugin" / "manifest.json").read_text(encoding="utf-8")
         )
         self.assertIn("Name=FN sync", desktop)
         self.assertIn("Name[zh]=飞牛", desktop)
         self.assertIn("Exec=fn-sync ui", desktop)
+        self.assertIn('title: t("FN sync", "飞牛")', app)
         self.assertEqual(manifest["name"], "FN sync")
         self.assertEqual(manifest["barWidget"]["displayName"], "FN sync")
         self.assertIn("fn-sync", manifest["barWidget"]["aliases"])
