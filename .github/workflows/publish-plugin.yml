@@ -1,0 +1,51 @@
+name: Publish Omarchy plugin
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "omarchy-plugin/**"
+      - ".github/workflows/publish-plugin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes jq shellcheck qt6-declarative-dev-tools
+      - name: Validate the plugin tree
+        run: |
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
+            --output /tmp/omarchy-plugin-validate
+          chmod +x /tmp/omarchy-plugin-validate
+          /tmp/omarchy-plugin-validate omarchy-plugin
+          python3 -m unittest discover -s omarchy-plugin/tests -v
+          shellcheck omarchy-plugin/scripts/fn-syncctl
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/FnSyncIcon.qml; do
+            /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
+          done
+      - name: Configure the plugin repository deploy key
+        env:
+          PLUGIN_DEPLOY_KEY: ${{ secrets.PLUGIN_DEPLOY_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$PLUGIN_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+      - name: Publish the plugin subtree
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git subtree split --prefix=omarchy-plugin --branch=plugin-release
+          git remote add plugin git@github.com:ripple0328/omarchy-fn-sync.git
+          git push plugin plugin-release:main

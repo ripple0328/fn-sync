@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install lint and coverage tools
+        run: python -m pip install --disable-pip-version-check coverage ruff
+      - name: Lint Python
+        run: ruff check src tests omarchy-plugin/scripts omarchy-plugin/tests
+      - name: Run controller and package tests with coverage
+        env:
+          FNSYNC_COVERAGE_SUBPROCESS: "1"
+        run: |
+          coverage erase
+          coverage run --parallel-mode -m unittest discover -s tests -v
+          coverage run --parallel-mode -m unittest discover -s omarchy-plugin/tests -v
+          coverage combine
+          coverage report
+          coverage xml
+      - name: Upload coverage report
+        if: matrix.python-version == '3.14'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.xml
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+      - name: Lint shell entry points and installers
+        run: |
+          shellcheck \
+            bin/fn-sync \
+            bin/fnsync \
+            scripts/build-packages.sh \
+            scripts/ci.sh \
+            scripts/demo-fn-syncctl \
+            scripts/fn-sync-omarchy-setup \
+            scripts/fnsync-omarchy-setup \
+            scripts/install-omarchy-bundle.sh \
+            scripts/install-omarchy-plugin.sh \
+            scripts/install.sh \
+            scripts/prepare-aur.sh \
+            scripts/release-source.sh \
+            scripts/verify-package.sh \
+            omarchy-plugin/scripts/fn-syncctl
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint GitHub Actions workflows
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/repo" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12 \
+            .github/workflows/ci.yml \
+            .github/workflows/publish-plugin.yml \
+            .github/workflows/release.yml \
+            omarchy-plugin/.github/workflows/test.yml
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Omarchy plugin validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes jq qt6-declarative-dev-tools
+      - name: Download the current Omarchy validator
+        run: |
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
+            --output /tmp/omarchy-plugin-validate
+          chmod +x /tmp/omarchy-plugin-validate
+      - name: Validate plugin manifest
+        run: /tmp/omarchy-plugin-validate omarchy-plugin
+      - name: Parse QML
+        run: |
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/FnSyncIcon.qml; do
+            /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
+          done
+
+  rclone-e2e:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Python and rclone
+        run: pacman -Syu --noconfirm python rclone
+      - name: Exercise real local WebDAV transfers
+        run: python3 -m unittest tests.test_rclone_e2e -v
+
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install package validation dependencies
+        run: pacman -Syu --noconfirm git jq namcap
+      - name: Build as an unprivileged Arch packager
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- ./scripts/build-packages.sh
+      - name: Verify package and bundled plugin
+        run: ./scripts/verify-package.sh
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: fn-sync-packages
+          path: dist/

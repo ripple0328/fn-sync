@@ -1,0 +1,99 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  echo "usage: fn-sync-omarchy-setup [--update] [--copy-only]"
+}
+
+update=0
+copy_only=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --update) update=1 ;;
+    --copy-only) copy_only=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$(id -u)" -eq 0 ]; then
+  echo "请作为桌面用户运行，不要使用 sudo。" >&2
+  exit 1
+fi
+if ! command -v omarchy >/dev/null 2>&1; then
+  echo "未找到 Omarchy。系统同步引擎仍可使用，但无法安装 Quickshell 插件。" >&2
+  exit 1
+fi
+
+source_dir=${FNSYNC_PLUGIN_SOURCE:-/usr/share/fn-sync/omarchy-plugin}
+if [ ! -f "$source_dir/manifest.json" ] && [ -f /usr/share/fnsync/omarchy-plugin/manifest.json ]; then
+  source_dir=/usr/share/fnsync/omarchy-plugin
+fi
+if [ ! -f "$source_dir/manifest.json" ]; then
+  script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+  project_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+  source_dir="$project_dir/omarchy-plugin"
+fi
+
+omarchy plugin validate "$source_dir"
+
+plugins_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
+# Keep the stable internal ID so existing bar layouts migrate without moving.
+target_dir="$plugins_dir/community.fnos-sync"
+mkdir -p "$plugins_dir"
+
+if [ -e "$target_dir" ]; then
+  if [ "$update" -ne 1 ]; then
+    echo "插件已存在：$target_dir" >&2
+    echo "如需升级，请运行: fn-sync-omarchy-setup --update" >&2
+    exit 1
+  fi
+  backup_root="${XDG_STATE_HOME:-$HOME/.local/state}/fn-sync/plugin-backups"
+  mkdir -p "$backup_root"
+  backup_dir="$backup_root/community.fnos-sync.$(date +%Y%m%d-%H%M%S).$$"
+  mv "$target_dir" "$backup_dir"
+  echo "已备份原插件到: $backup_dir"
+fi
+
+stage_dir=$(mktemp -d "$plugins_dir/.community.fnos-sync.install.XXXXXX")
+cleanup() {
+  if [ -n "${stage_dir:-}" ] && [ -d "$stage_dir" ]; then
+    rm -rf -- "$stage_dir"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$stage_dir/scripts"
+mkdir -p "$stage_dir/assets"
+install -m644 "$source_dir/manifest.json" "$stage_dir/manifest.json"
+install -m644 "$source_dir/BarWidget.qml" "$stage_dir/BarWidget.qml"
+install -m644 "$source_dir/Panel.qml" "$stage_dir/Panel.qml"
+install -m644 "$source_dir/FnSyncIcon.qml" "$stage_dir/FnSyncIcon.qml"
+install -m644 "$source_dir/assets/fn-sync-symbolic.png" "$stage_dir/assets/fn-sync-symbolic.png"
+install -m755 "$source_dir/scripts/fn-syncctl" "$stage_dir/scripts/fn-syncctl"
+install -m755 "$source_dir/scripts/fn_sync_discover.py" "$stage_dir/scripts/fn_sync_discover.py"
+for documentation in README.md LICENSE preview.png; do
+  if [ -f "$source_dir/$documentation" ]; then
+    install -m644 "$source_dir/$documentation" "$stage_dir/$documentation"
+  fi
+done
+mv "$stage_dir" "$target_dir"
+stage_dir=
+
+if [ "$copy_only" -eq 1 ]; then
+  echo "fn-sync Omarchy 插件已复制到: $target_dir"
+  exit 0
+fi
+
+systemctl --user daemon-reload
+# fnsync.service remains the compatibility-stable unit name, but launches fn-sync.
+systemctl --user enable --now fnsync.service
+
+if omarchy-shell shell rescanPlugins >/dev/null 2>&1 && \
+  omarchy plugin enable community.fnos-sync --section right; then
+  echo "fn-sync 已安装：后台服务正在运行，Omarchy 插件已启用。"
+else
+  echo "插件已安装，但 omarchy-shell 当前不可用。"
+  echo "进入 Omarchy 桌面后运行: omarchy plugin enable community.fnos-sync --section right"
+fi

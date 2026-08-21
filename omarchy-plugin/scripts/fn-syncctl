@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+
+installed="${FNSYNC_BIN:-$HOME/.local/bin/fn-sync}"
+if [ ! -x "$installed" ]; then
+  installed=$(command -v fn-sync || true)
+fi
+if [ -z "$installed" ]; then
+  installed=$(command -v fnsync || true)
+fi
+
+case "${1:-status}" in
+  status)
+    if [ -z "$installed" ]; then
+      printf '%s\n' '{"installed":false,"tasks":[],"connections":[],"error":"fn-sync is not installed"}'
+      exit 0
+    fi
+    language="${2:-system}"
+    output=$(FNSYNC_LANGUAGE="$language" "$installed" status --json 2>&1) || {
+      python3 -c 'import json,sys; print(json.dumps({"installed": True, "tasks": [], "error": sys.stdin.read().strip()}))' <<EOF
+$output
+EOF
+      exit 0
+    }
+    connections=$(FNSYNC_LANGUAGE="$language" "$installed" connection list --json 2>&1) || {
+      python3 -c 'import json,sys; print(json.dumps({"installed": True, "tasks": [], "connections": [], "error": sys.stdin.read().strip()}))' <<EOF
+$connections
+EOF
+      exit 0
+    }
+    python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"installed": True, "tasks": payload["tasks"], "connections": payload["connections"], "error": ""}))' <<EOF
+{"tasks":$output,"connections":$connections}
+EOF
+    ;;
+  sync)
+    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    FNSYNC_LANGUAGE="${2:-system}" exec "$installed" sync-now
+    ;;
+  open)
+    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    FNSYNC_LANGUAGE="${2:-system}" exec "$installed" ui
+    ;;
+  discover)
+    script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+    exec python3 "$script_dir/fn_sync_discover.py"
+    ;;
+  cli)
+    [ -n "$installed" ] || { echo "fn-sync is not installed" >&2; exit 1; }
+    shift
+    language="${1:-system}"
+    shift || true
+    [ "$#" -gt 0 ] || { echo "fn-syncctl cli requires a command" >&2; exit 2; }
+    FNSYNC_LANGUAGE="$language" FNSYNC_STREAM_OUTPUT=1 exec "$installed" "$@"
+    ;;
+  *)
+    echo "usage: fn-syncctl [status|sync|open|discover|cli ...]" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+pkg/
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/*.tar.gz
+packaging/arch/*.pkg.tar.zst
+# Local design audits contain real desktop paths and NAS labels. Public README
+# screenshots are privacy-safe crops under docs/screenshots/ instead.
+docs/audits/

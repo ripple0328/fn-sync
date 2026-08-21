@@ -1,0 +1,45 @@
+pkgname=fn-sync
+pkgver=0.8.0
+pkgrel=1
+pkgdesc="Safe fnOS WebDAV sync client with Omarchy integration"
+arch=('any')
+url="https://github.com/ripple0328/fn-sync"
+license=('MIT')
+depends=('python' 'rclone' 'gjs' 'gtk4' 'libsecret' 'libnotify' 'hicolor-icon-theme')
+optdepends=('omarchy: native Quickshell management panel')
+provides=("fnsync=$pkgver")
+conflicts=('fnsync')
+replaces=('fnsync')
+install=fn-sync.install
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('3ed413638359da6388bb45abc2a36f38ce646107ea988da89c8c5d8b1ecdf08b')
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -Dm755 src/fnsync.py "$pkgdir/usr/lib/fn-sync/fnsync.py"
+  install -Dm755 bin/fn-sync "$pkgdir/usr/bin/fn-sync"
+  ln -s fn-sync "$pkgdir/usr/bin/fnsync"
+  install -Dm644 ui/app.js "$pkgdir/usr/share/fn-sync/ui/app.js"
+  install -Dm644 packaging/fnsync.service "$pkgdir/usr/lib/systemd/user/fnsync.service"
+  ln -s fnsync.service "$pkgdir/usr/lib/systemd/user/fn-sync.service"
+  install -Dm644 packaging/fnsync.desktop "$pkgdir/usr/share/applications/fn-sync.desktop"
+  install -Dm644 assets/fn-sync.png "$pkgdir/usr/share/icons/hicolor/192x192/apps/fn-sync.png"
+  install -Dm755 scripts/fn-sync-omarchy-setup "$pkgdir/usr/bin/fn-sync-omarchy-setup"
+  ln -s fn-sync-omarchy-setup "$pkgdir/usr/bin/fnsync-omarchy-setup"
+
+  install -Dm644 omarchy-plugin/manifest.json "$pkgdir/usr/share/fn-sync/omarchy-plugin/manifest.json"
+  install -Dm644 omarchy-plugin/BarWidget.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/BarWidget.qml"
+  install -Dm644 omarchy-plugin/Panel.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/Panel.qml"
+  install -Dm644 omarchy-plugin/FnSyncIcon.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/FnSyncIcon.qml"
+  install -Dm644 omarchy-plugin/assets/fn-sync-symbolic.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/assets/fn-sync-symbolic.png"
+  install -Dm755 omarchy-plugin/scripts/fn-syncctl "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl"
+  install -Dm755 omarchy-plugin/scripts/fn_sync_discover.py "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn_sync_discover.py"
+  install -Dm644 omarchy-plugin/README.md "$pkgdir/usr/share/fn-sync/omarchy-plugin/README.md"
+  install -Dm644 omarchy-plugin/LICENSE "$pkgdir/usr/share/fn-sync/omarchy-plugin/LICENSE"
+  install -Dm644 omarchy-plugin/preview.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/preview.png"
+
+  install -Dm644 README.md "$pkgdir/usr/share/doc/fn-sync/README.md"
+  install -Dm644 docs/research.md "$pkgdir/usr/share/doc/fn-sync/research.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/fn-sync/LICENSE"
+}

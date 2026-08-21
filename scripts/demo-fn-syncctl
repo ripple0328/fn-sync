@@ -1,0 +1,70 @@
+#!/bin/sh
+set -eu
+
+case "${1:-status}" in
+  status)
+    printf '%s\n' '{
+      "installed": true,
+      "error": "",
+      "tasks": [
+        {
+          "id": "demo-projects",
+          "name": "Projects",
+          "connection_id": "demo-home",
+          "connection_name": "Home fnOS",
+          "enabled": true,
+          "initialized": true,
+          "mode": "two-way",
+          "local_path": "/home/alex/Projects",
+          "remote_path": "Projects",
+          "interval_seconds": 300,
+          "filters": [],
+          "status": {
+            "state": "running",
+            "action": "sync",
+            "message": "Comparing and transferring changes now."
+          }
+        },
+        {
+          "id": "demo-photos",
+          "name": "Photos",
+          "connection_id": "demo-home",
+          "connection_name": "Home fnOS",
+          "enabled": true,
+          "initialized": true,
+          "mode": "upload-only",
+          "local_path": "/home/alex/Pictures",
+          "remote_path": "Photos",
+          "interval_seconds": 600,
+          "filters": [],
+          "status": {
+            "state": "ok",
+            "action": "sync",
+            "message": "Complete",
+            "finished_at": "2026-08-20T22:45:00-07:00"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "demo-home",
+          "name": "Home fnOS",
+          "url": "https://nas.home:5006/",
+          "username": "alex",
+          "allow_http": false,
+          "insecure_skip_verify": false
+        }
+      ]
+    }'
+    ;;
+  sync)
+    printf '%s\n' 'Demo mode does not change files.'
+    ;;
+  open)
+    exit 0
+    ;;
+  *)
+    printf '%s\n' 'Demo mode supports status only.' >&2
+    exit 2
+    ;;
+esac

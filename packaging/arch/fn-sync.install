@@ -1,0 +1,12 @@
+post_install() {
+  echo "fn-sync installed. Omarchy users: run fn-sync-omarchy-setup to install and enable the bundled panel."
+}
+
+post_upgrade() {
+  echo "fn-sync upgraded. Refresh the Omarchy plugin with: fn-sync-omarchy-setup --update"
+}
+
+pre_remove() {
+  echo "The user plugin and sync configuration are preserved."
+  echo "Disable the service with: systemctl --user disable --now fnsync.service"
+}

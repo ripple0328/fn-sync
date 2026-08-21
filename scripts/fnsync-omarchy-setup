@@ -1,0 +1,10 @@
+#!/bin/sh
+# Compatibility entry point retained for pre-0.3.0 documentation and scripts.
+set -eu
+
+if command -v fn-sync-omarchy-setup >/dev/null 2>&1; then
+  exec fn-sync-omarchy-setup "$@"
+fi
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$script_dir/fn-sync-omarchy-setup" "$@"

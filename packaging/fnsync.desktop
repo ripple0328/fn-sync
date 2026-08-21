@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=FN sync
+Name[zh]=飞牛
+Name[zh_CN]=飞牛
+Comment=Sync files between Omarchy and an fnOS NAS
+Comment[zh_CN]=在 Omarchy 与飞牛 fnOS 之间同步文件
+Exec=fn-sync ui
+Icon=fn-sync
+Terminal=false
+Categories=Network;FileTransfer;
+StartupNotify=true

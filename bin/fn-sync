@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
+# A launcher installed in ~/.local/bin may coexist with a pacman package while
+# testing. Use the newer engine, preferring the system copy when versions match,
+# so a future package upgrade cannot remain shadowed by an older dev install.
+if [ "$script_dir" = "$HOME/.local/bin" ] && [ -f "$data_home/fn-sync/fnsync.py" ]; then
+  if [ -f /usr/lib/fn-sync/fnsync.py ]; then
+    local_version=$(python3 "$data_home/fn-sync/fnsync.py" --version 2>/dev/null | awk '{print $NF}')
+    system_version=$(python3 /usr/lib/fn-sync/fnsync.py --version 2>/dev/null | awk '{print $NF}')
+    newest=$(printf '%s\n%s\n' "$local_version" "$system_version" | sort -V | tail -n 1)
+    if [ "$newest" = "$system_version" ]; then
+      exec python3 /usr/lib/fn-sync/fnsync.py "$@"
+    fi
+  fi
+  exec python3 "$data_home/fn-sync/fnsync.py" "$@"
+fi
+
+if [ -f /usr/lib/fn-sync/fnsync.py ]; then
+  exec python3 /usr/lib/fn-sync/fnsync.py "$@"
+fi
+
+if [ -f "$data_home/fn-sync/fnsync.py" ]; then
+  exec python3 "$data_home/fn-sync/fnsync.py" "$@"
+fi
+
+# Compatibility with installations made before the public name became fn-sync.
+if [ -f /usr/lib/fnsync/fnsync.py ]; then
+  exec python3 /usr/lib/fnsync/fnsync.py "$@"
+fi
+if [ -f "$data_home/fnsync/fnsync.py" ]; then
+  exec python3 "$data_home/fnsync/fnsync.py" "$@"
+fi
+
+exec python3 "$script_dir/../src/fnsync.py" "$@"

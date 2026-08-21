@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install release dependencies
+        run: pacman -Syu --noconfirm git jq namcap
+      - name: Verify tag and build release artifacts
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          test "$GITHUB_REF_NAME" = "v$version"
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- ./scripts/build-packages.sh
+          runuser -u builder -- ./scripts/release-source.sh "$GITHUB_REF_NAME" "dist/fn-sync-$version.tar.gz"
+          runuser -u builder -- ./scripts/prepare-aur.sh "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync"
+          cp "dist/fn-sync-$version.tar.gz" "dist/aur/fn-sync/"
+          runuser -u builder -- sh -c 'cd dist/aur/fn-sync && makepkg --verifysource'
+          ./scripts/verify-package.sh
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-artifacts
+          path: dist/
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-artifacts
+          path: dist
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "FN sync ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            dist/fn-sync-*.tar.gz \
+            dist/fn-sync-*.pkg.tar.zst
+
+  aur:
+    if: vars.AUR_PUBLISH_ENABLED == 'true'
+    needs: github-release
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    environment: aur
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-artifacts
+          path: dist
+      - name: Configure AUR SSH access
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          pacman -Syu --noconfirm git openssh
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+          EOF
+      - name: Publish PKGBUILD and .SRCINFO
+        run: |
+          git clone ssh://aur@aur.archlinux.org/fn-sync.git aur-repository
+          cp dist/aur/fn-sync/PKGBUILD aur-repository/PKGBUILD
+          cp dist/aur/fn-sync/.SRCINFO aur-repository/.SRCINFO
+          cp dist/aur/fn-sync/fn-sync.install aur-repository/fn-sync.install
+          cd aur-repository
+          git config user.name "Qingbo Zhang"
+          git config user.email "ripple0328@gmail.com"
+          git add -- PKGBUILD .SRCINFO fn-sync.install
+          if git diff --cached --quiet; then
+            echo "AUR metadata is already current"
+            exit 0
+          fi
+          git commit -m "Update to ${GITHUB_REF_NAME#v}"
+          git push origin master
