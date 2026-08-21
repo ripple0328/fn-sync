@@ -50,6 +50,7 @@ class PublishingContractTests(unittest.TestCase):
         )
         for required in (
             "secrets.PLUGIN_DEPLOY_KEY",
+            "omarchy-plugin/PanelPageHeader.qml",
             "git subtree split --prefix=omarchy-plugin",
             "ripple0328/omarchy-fn-sync.git",
             "git push plugin plugin-release:main",

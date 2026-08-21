@@ -31,7 +31,7 @@ jobs:
           /tmp/omarchy-plugin-validate omarchy-plugin
           python3 -m unittest discover -s omarchy-plugin/tests -v
           shellcheck omarchy-plugin/scripts/fn-syncctl
-          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/FnSyncIcon.qml; do
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
       - name: Configure the plugin repository deploy key
