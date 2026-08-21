@@ -40,7 +40,7 @@ installs both tools and always enforces those lint checks. Package verification 
 ./scripts/verify-package.sh
 ```
 
-CI currently runs 91 automated tests. It also starts an authenticated rclone WebDAV server entirely inside the runner and proves
+CI currently runs 92 automated tests. It also starts an authenticated rclone WebDAV server entirely inside the runner and proves
 two-way initialization, incremental transfer, access-marker stopping and repair, and the
 non-deleting behavior of both one-way modes. It records branch coverage for the Python
 controller and discovery helper, with a hard 85% combined line-and-branch minimum in

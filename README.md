@@ -268,7 +268,7 @@ the same local Linux directory at the same time.
 
 ## Validation
 
-- 91 automated tests cover real WebDAV two-way/one-way transfers, complete CLI
+- 92 automated tests cover real WebDAV two-way/one-way transfers, complete CLI
   connection and task lifecycles, streamed progress and silent timeouts,
   background scheduling, Secret Service, LAN discovery, the one-step installer
   sandbox, packaged-controller startup, release-source integrity,

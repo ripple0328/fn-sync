@@ -1,6 +1,10 @@
 import base64
 import hashlib
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -161,6 +165,20 @@ class PublishingContractTests(unittest.TestCase):
             'git push --force-with-lease=refs/heads/main:"$plugin_main"',
         ):
             self.assertIn(required, workflow)
+
+    def test_plugin_tests_pass_without_the_parent_source_tree(self):
+        with tempfile.TemporaryDirectory(prefix="fn-sync-standalone-plugin-") as temp:
+            plugin = Path(temp) / "plugin"
+            shutil.copytree(ROOT / "omarchy-plugin", plugin)
+            result = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+                cwd=plugin,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

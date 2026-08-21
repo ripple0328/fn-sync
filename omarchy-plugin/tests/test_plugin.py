@@ -90,14 +90,30 @@ class PluginContractTests(unittest.TestCase):
             "runtime/fnsync.service",
         ):
             self.assertTrue((ROOT / relative).is_file(), relative)
-        self.assertEqual(
-            (ROOT / "runtime" / "fnsync.py").read_bytes(),
-            (ROOT.parent / "src" / "fnsync.py").read_bytes(),
+        source_controller = ROOT.parent / "src" / "fnsync.py"
+        source_ui = ROOT.parent / "ui" / "app.js"
+        if source_controller.is_file() and source_ui.is_file():
+            self.assertEqual(
+                (ROOT / "runtime" / "fnsync.py").read_bytes(),
+                source_controller.read_bytes(),
+            )
+            self.assertEqual(
+                (ROOT / "runtime" / "ui" / "app.js").read_bytes(),
+                source_ui.read_bytes(),
+            )
+            return
+
+        manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "runtime" / "fnsync.py"), "--version"],
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
         )
-        self.assertEqual(
-            (ROOT / "runtime" / "ui" / "app.js").read_bytes(),
-            (ROOT.parent / "ui" / "app.js").read_bytes(),
-        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), f"fn-sync {manifest['version']}")
+        self.assertGreater((ROOT / "runtime" / "ui" / "app.js").stat().st_size, 1024)
 
     def test_clean_system_reports_integrated_setup_instead_of_missing_client(self):
         with tempfile.TemporaryDirectory(prefix="fn-sync-plugin-path-") as temp:
