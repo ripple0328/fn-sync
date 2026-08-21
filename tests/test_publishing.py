@@ -27,6 +27,7 @@ class PublishingContractTests(unittest.TestCase):
             "./scripts/build-packages.sh",
             "./scripts/verify-package.sh",
             "omarchy-plugin-validate",
+            "pacman-contrib",
         ):
             self.assertIn(required, workflow)
 

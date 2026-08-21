@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install package validation dependencies
-        run: pacman -Syu --noconfirm git jq namcap
+        run: pacman -Syu --noconfirm git jq namcap pacman-contrib
       - name: Build as an unprivileged Arch packager
         run: |
           useradd --create-home builder

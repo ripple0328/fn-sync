@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install release dependencies
-        run: pacman -Syu --noconfirm git jq namcap
+        run: pacman -Syu --noconfirm git jq namcap pacman-contrib
       - name: Verify tag and build release artifacts
         run: |
           version=$(tr -d '[:space:]' < VERSION)
