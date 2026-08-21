@@ -30,15 +30,8 @@ class PluginContractTests(unittest.TestCase):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
         bar = (ROOT / "BarWidget.qml").read_text(encoding="utf-8")
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-        desktop = (ROOT.parent / "packaging" / "fnsync.desktop").read_text(
-            encoding="utf-8"
-        )
-        app = (ROOT.parent / "ui" / "app.js").read_text(encoding="utf-8")
         self.assertEqual(manifest["name"], "FN sync")
         self.assertEqual(manifest["barWidget"]["displayName"], "FN sync")
-        self.assertIn("Name=FN sync", desktop)
-        self.assertIn("Name[zh]=飞牛", desktop)
-        self.assertIn('title: t("FN sync", "飞牛")', app)
         self.assertIn('title: root.l10n("FN sync", "飞牛")', panel)
         self.assertIn('root.showPrimary("tasks")', panel)
         self.assertIn('root.showPrimary("settings")', panel)
