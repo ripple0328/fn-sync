@@ -6,6 +6,11 @@ version=$(tr -d '[:space:]' < "$project_dir/VERSION")
 package_path=${1:-}
 plugin_archive=${2:-"$project_dir/dist/fn-sync-omarchy-plugin-$version.tar.gz"}
 
+if ! command -v bsdtar >/dev/null 2>&1; then
+  echo "bsdtar is required to verify Arch package archives (install libarchive)" >&2
+  exit 1
+fi
+
 if [ -z "$package_path" ]; then
   package_path=$(find "$project_dir/dist" -maxdepth 1 -type f -name "fn-sync-$version-*.pkg.tar.zst" -print -quit)
 fi
