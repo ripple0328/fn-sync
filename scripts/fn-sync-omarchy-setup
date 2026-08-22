@@ -101,9 +101,7 @@ if [ "$copy_only" -eq 1 ]; then
   exit 0
 fi
 
-systemctl --user daemon-reload
-# fnsync.service remains the compatibility-stable unit name, but launches fn-sync.
-systemctl --user enable --now fnsync.service
+"$target_dir/scripts/fn-syncctl" bootstrap
 
 if omarchy-shell shell rescanPlugins >/dev/null 2>&1 && \
   omarchy plugin enable community.fnos-sync --section right; then

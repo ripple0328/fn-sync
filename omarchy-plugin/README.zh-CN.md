@@ -13,7 +13,8 @@ FN sync 是一个跟随主题的 Omarchy 状态栏组件和管理面板，用于
 面板将可复用的 NAS 授权与同步任务设置分开，与官方客户端“先连接、后建任务”的
 逻辑一致。只需在设置中授权一次 NAS，之后任意数量的任务都可以复用该连接。
 
-新 NAS 授权只有在测试成功后才能保存。同步任务使用原生本地文件夹选择器和可
+“测试并保存”是一个原子操作：新建或编辑的授权只有在登录和根目录读取都成功后
+才会写入。同步任务使用原生本地文件夹选择器和可
 浏览的 NAS 文件夹选择器，无需手工输入路径。打开新 NAS 表单时还会扫描当前
 直连的私有局域网；有响应的 WebDAV 端点可以自动填写地址。发现 fnOS 但没有
 WebDAV 时，界面会明确标注并可打开管理页面。最终仍须成功完成登录和文件夹测试。
@@ -37,6 +38,17 @@ omarchy plugin add https://github.com/ripple0328/omarchy-fn-sync.git --enable --
 Python 运行时；插件不需要系统 Python、AUR、GTK/GJS、管理员授权或第二条终端
 命令。
 
+## 使用要求
+
+- 运行在 x86-64 或 ARM64 的 Omarchy，并有可用的用户级 systemd 会话。
+- 一台已启用 WebDAV 的飞牛 NAS，以及能读写所选文件夹的账号。符合标准的非飞牛
+  WebDAV 服务也可能可用，但当前支持和测试目标是飞牛 NAS。
+- 本机能访问该 WebDAV 端点。只有在系统没有可用 rclone 时，首次下载固定版本的
+  插件私有 rclone 才需要互联网连接。
+
+Secret Service 和桌面通知均为可选功能；没有 Secret Service 时会使用 rclone 的
+混淆凭据格式。
+
 使用下面的命令更新 Git 管理的插件：
 
 ```bash
@@ -51,9 +63,12 @@ omarchy plugin update community.fnos-sync --yes
 先停止插件使用的后台服务，再移除插件：
 
 ```bash
-systemctl --user disable --now fnsync.service
-rm -f ~/.config/systemd/user/fnsync.service
-systemctl --user daemon-reload
+unit="$HOME/.config/systemd/user/community.fnos-sync.service"
+if [ -f "$unit" ] && grep -Fqx '# Managed by community.fnos-sync' "$unit"; then
+  systemctl --user disable --now community.fnos-sync.service
+  rm -f -- "$unit"
+  systemctl --user daemon-reload
+fi
 omarchy plugin remove community.fnos-sync --yes
 ```
 

@@ -14,7 +14,8 @@ The panel separates reusable NAS authorization from sync-task setup, matching
 the official client's connection-first model. Use the NAS tab once, then reuse
 that connection from any number of tasks.
 
-New NAS authorizations are tested before Save is enabled. Sync tasks use native
+**Test and save** is one atomic action: login and root-folder access must succeed
+before a new or edited authorization is written. Sync tasks use native
 local-folder selection and a browsable NAS folder picker instead of typed paths.
 Opening a new NAS form also starts a bounded scan of the directly connected
 private LAN. A responding WebDAV endpoint fills the address automatically;
@@ -43,6 +44,18 @@ no administrator access is needed. The controller and discovery helper include
 their own Python runtime. The plugin needs no host Python, AUR package, GTK/GJS
 runtime, administrator prompt, or second terminal command.
 
+## Requirements
+
+- Omarchy on x86-64 or ARM64 with a working per-user systemd session.
+- An fnOS NAS with WebDAV enabled and an account that can read and write the
+  selected folders. A standards-compliant non-fnOS WebDAV server may work, but
+  fnOS is the supported and tested target.
+- Network access from this computer to that WebDAV endpoint. Internet access is
+  needed once only when the plugin must download its pinned private rclone copy.
+
+Secret Service and desktop notifications are optional. Without Secret Service,
+FN Sync uses rclone's obscured credential format.
+
 Update the Git-managed installation with:
 
 ```bash
@@ -57,9 +70,12 @@ installations. It is not a dependency of this plugin.
 Stop the plugin-owned background service, then remove the plugin:
 
 ```bash
-systemctl --user disable --now fnsync.service
-rm -f ~/.config/systemd/user/fnsync.service
-systemctl --user daemon-reload
+unit="$HOME/.config/systemd/user/community.fnos-sync.service"
+if [ -f "$unit" ] && grep -Fqx '# Managed by community.fnos-sync' "$unit"; then
+  systemctl --user disable --now community.fnos-sync.service
+  rm -f -- "$unit"
+  systemctl --user daemon-reload
+fi
 omarchy plugin remove community.fnos-sync --yes
 ```
 

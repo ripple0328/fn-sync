@@ -3,8 +3,12 @@ set -eu
 
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 runtime_dir="$project_dir/omarchy-plugin/runtime"
+controller_dir="$project_dir/omarchy-plugin/controller"
 binary_dir=${FNSYNC_PLUGIN_RUNTIME_DIR:-}
 binary_architectures=${FNSYNC_PLUGIN_RUNTIME_ARCHES:-"amd64 arm64"}
+
+# Keep the auditable controller source byte-identical to the runtime source.
+install -m 0644 "$project_dir/src/fnsync.py" "$controller_dir/fnsync.py"
 
 rm -rf -- "$runtime_dir"
 mkdir -p "$runtime_dir"

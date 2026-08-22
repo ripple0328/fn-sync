@@ -1,3 +1,4 @@
+# Managed by community.fnos-sync
 [Unit]
 Description=FN Sync background service for the Omarchy plugin
 After=network-online.target

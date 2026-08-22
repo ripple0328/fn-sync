@@ -17,8 +17,8 @@ jobs:
       matrix:
         python-version: ["3.11", "3.14"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Assemble the standalone plugin runtime
@@ -39,7 +39,7 @@ jobs:
           coverage xml
       - name: Upload coverage report
         if: matrix.python-version == '3.14'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
           path: coverage.xml
@@ -47,7 +47,7 @@ jobs:
   shell:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install ShellCheck
         run: |
           sudo apt-get update
@@ -76,13 +76,13 @@ jobs:
   workflows:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Lint GitHub Actions workflows
         run: |
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/repo" \
             --workdir /repo \
-            rhysd/actionlint:1.7.12 \
+            rhysd/actionlint:1.7.12@sha256:9d36088643581e728c969f35141f88139fec77280b2be23c1f66f8e40e1025e7 \
             .github/workflows/ci.yml \
             .github/workflows/publish-aur.yml \
             .github/workflows/publish-plugin.yml \
@@ -92,7 +92,7 @@ jobs:
   plugin:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install Omarchy plugin validation tools
         run: |
           sudo apt-get update
@@ -100,7 +100,7 @@ jobs:
       - name: Download the current Omarchy validator
         run: |
           curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
+            https://raw.githubusercontent.com/basecamp/omarchy/ed7bae4ac5a570e9df307486e0202fdafcc6ee24/bin/omarchy-plugin-validate \
             --output /tmp/omarchy-plugin-validate
           chmod +x /tmp/omarchy-plugin-validate
       - name: Validate plugin manifest
@@ -116,8 +116,8 @@ jobs:
   plugin-runtime:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
       - name: Install runtime build and test tools
@@ -140,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install Python and rclone
         run: pacman -Syu --noconfirm python rclone
       - name: Exercise real local WebDAV transfers
@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install package validation dependencies
         run: pacman -Syu --noconfirm git jq namcap pacman-contrib
       - name: Build as an unprivileged Arch packager
@@ -161,7 +161,7 @@ jobs:
       - name: Verify package and bundled plugin
         run: ./scripts/verify-package.sh
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fn-sync-packages
           path: dist/

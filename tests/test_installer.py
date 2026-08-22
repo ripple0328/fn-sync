@@ -128,7 +128,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(["omarchy", "plugin", "validate", str(PLUGIN)], calls)
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
         self.assertIn(
-            ["systemctl", "--user", "enable", "--now", "fnsync.service"], calls
+            ["systemctl", "--user", "restart", "community.fnos-sync.service"], calls
         )
         self.assertIn(["omarchy-shell", "shell", "rescanPlugins"], calls)
         self.assertIn(

@@ -11,6 +11,8 @@ esac
 bundled_binary="$plugin_dir/runtime/bin/fn-sync-runtime-$runtime_arch"
 bundled_client="$plugin_dir/runtime/fnsync.py"
 service_source="$plugin_dir/runtime/fnsync.service"
+service_unit_name="community.fnos-sync.service"
+service_owner_marker="# Managed by community.fnos-sync"
 plugin_version=$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$plugin_dir/manifest.json" | sed -n '1p')
 service_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/fn-sync"
 service_version_file="$service_state_dir/plugin-service-version"
@@ -21,7 +23,7 @@ rclone_binary=""
 
 rclone_supported() {
   [ -x "${1:-}" ] || return 1
-  version=$("$1" version 2>/dev/null | sed -n 's/^rclone v\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p' | sed -n '1p')
+  version=$("$1" version 2>/dev/null | sed -n 's/^rclone v\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p; /rclone v[0-9]/q')
   [ -n "$version" ] || return 1
   major=${version%% *}
   minor=${version#* }
@@ -33,7 +35,7 @@ select_rclone() {
   system_rclone=$(command -v rclone 2>/dev/null || true)
   if rclone_supported "$system_rclone"; then
     rclone_binary="$system_rclone"
-  elif rclone_supported "$managed_rclone"; then
+  elif [ ! -L "$managed_rclone" ] && rclone_supported "$managed_rclone"; then
     rclone_binary="$managed_rclone"
   fi
   if [ -n "$rclone_binary" ]; then
@@ -73,7 +75,12 @@ install_managed_rclone() (
   trap 'rm -rf -- "$temp_dir"' EXIT INT TERM
 
   curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+    --connect-timeout 15 --max-time 300 --max-filesize 67108864 \
     --output "$temp_dir/$archive" "$url"
+  [ "$(wc -c < "$temp_dir/$archive")" -le 67108864 ] || {
+    echo "The downloaded rclone archive exceeded the 64 MiB limit" >&2
+    exit 1
+  }
   actual_sha256=$(sha256sum "$temp_dir/$archive" | awk '{print $1}')
   if [ "$actual_sha256" != "$expected_sha256" ]; then
     echo "The downloaded rclone archive failed its pinned SHA-256 check" >&2
@@ -87,6 +94,10 @@ install_managed_rclone() (
     exit 1
   }
   mkdir -p "$managed_runtime_dir"
+  [ ! -L "$managed_rclone" ] || {
+    echo "Refusing to replace a symbolic-link private rclone runtime" >&2
+    exit 1
+  }
   install -m 0755 "$extracted" "$managed_rclone"
   rclone_supported "$managed_rclone" || {
     echo "The prepared rclone executable could not be verified" >&2
@@ -150,29 +161,54 @@ missing_dependencies() {
 ensure_service() {
   [ -f "$service_source" ] || return 0
   unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-  unit="$unit_dir/fnsync.service"
+  unit="$unit_dir/$service_unit_name"
+  legacy_unit="$unit_dir/fnsync.service"
   unit_changed=0
   mkdir -p "$unit_dir"
+  # Versions before 0.10.3 used a generic unit name. Remove it only when both
+  # exact signatures prove that it was created by this plugin.
+  if [ -f "$legacy_unit" ] && [ ! -L "$legacy_unit" ] \
+    && grep -Fqx 'Description=FN Sync background service for the Omarchy plugin' "$legacy_unit" \
+    && grep -Fqx 'ExecStart=%h/.config/omarchy/plugins/community.fnos-sync/scripts/fn-syncctl daemon' "$legacy_unit"; then
+    systemctl --user disable --now fnsync.service >/dev/null 2>&1 || true
+    rm -f -- "$legacy_unit"
+    systemctl --user daemon-reload
+  fi
+  if [ -L "$unit" ]; then
+    echo "Refusing to replace symbolic-link service unit: $unit" >&2
+    return 4
+  fi
+  if [ -e "$unit" ] && ! grep -Fqx "$service_owner_marker" "$unit"; then
+    echo "Refusing to replace a service unit not owned by the FN Sync plugin: $unit" >&2
+    return 4
+  fi
   if [ ! -f "$unit" ] || ! cmp -s "$service_source" "$unit"; then
     install -m 0644 "$service_source" "$unit"
     systemctl --user daemon-reload
     unit_changed=1
   fi
-  if ! systemctl --user is-enabled --quiet fnsync.service 2>/dev/null \
-    || ! systemctl --user is-active --quiet fnsync.service 2>/dev/null; then
-    systemctl --user enable --now fnsync.service >/dev/null
+  if ! systemctl --user is-enabled --quiet "$service_unit_name" 2>/dev/null \
+    || ! systemctl --user is-active --quiet "$service_unit_name" 2>/dev/null; then
+    systemctl --user enable --now "$service_unit_name" >/dev/null
   elif [ "$unit_changed" -eq 1 ] || {
     [ -n "$plugin_version" ] \
       && [ "$(sed -n '1p' "$service_version_file" 2>/dev/null || true)" != "$plugin_version" ]
   }; then
-    systemctl --user restart fnsync.service
+    systemctl --user restart "$service_unit_name"
   fi
 }
 
 record_service_version() {
   [ -n "$plugin_version" ] || return 0
   mkdir -p "$service_state_dir"
-  printf '%s\n' "$plugin_version" > "$service_version_file"
+  [ ! -L "$service_version_file" ] || {
+    echo "Refusing to replace a symbolic-link service version file" >&2
+    return 4
+  }
+  version_temp=$(mktemp "$service_state_dir/.plugin-service-version.XXXXXX")
+  printf '%s\n' "$plugin_version" > "$version_temp"
+  chmod 0600 "$version_temp"
+  mv -f -- "$version_temp" "$service_version_file"
 }
 
 bootstrap() {
@@ -206,19 +242,7 @@ case "${1:-status}" in
     # idempotent bootstrap path if the one-shot QML timer is skipped during a
     # live plugin reload.
     ensure_service
-    output=$(FNSYNC_LANGUAGE="$language" run_client status --json 2>&1) || {
-      jq -cn --arg distribution "$client_distribution" --arg error "$output" \
-        '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:[],connections:[],error:($error|rtrimstr("\n"))}'
-      exit 0
-    }
-    connections=$(FNSYNC_LANGUAGE="$language" run_client connection list --json 2>&1) || {
-      jq -cn --arg distribution "$client_distribution" --arg error "$connections" \
-        '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:[],connections:[],error:($error|rtrimstr("\n"))}'
-      exit 0
-    }
-    jq -cn --arg distribution "$client_distribution" --argjson tasks "$output" \
-      --argjson connections "$connections" \
-      '{installed:true,ready:true,distribution:$distribution,missing_dependencies:"",tasks:$tasks,connections:$connections,error:""}'
+    FNSYNC_LANGUAGE="$language" exec_client plugin-status --distribution "$client_distribution"
     ;;
   bootstrap)
     bootstrap

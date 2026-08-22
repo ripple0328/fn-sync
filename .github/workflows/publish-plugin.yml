@@ -29,8 +29,8 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
       - name: Install the pinned runtime builder
@@ -38,11 +38,11 @@ jobs:
       - name: Build standalone plugin controller
         run: ./scripts/build-plugin-runtime.sh "${{ matrix.architecture }}" "$RUNNER_TEMP/plugin-runtime"
       - name: Attest standalone plugin controller
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
       - name: Upload standalone plugin controller
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fn-sync-runtime-${{ matrix.architecture }}
           path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
@@ -53,11 +53,11 @@ jobs:
     needs: build-runtime
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Download standalone plugin controllers
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: fn-sync-runtime-*
           path: ${{ runner.temp }}/plugin-runtime
@@ -117,7 +117,7 @@ jobs:
               attestation_repository: "ripple0328/fn-sync"
             }' > omarchy-plugin/BUILD-PROVENANCE.json
           curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
+            https://raw.githubusercontent.com/basecamp/omarchy/ed7bae4ac5a570e9df307486e0202fdafcc6ee24/bin/omarchy-plugin-validate \
             --output /tmp/omarchy-plugin-validate
           chmod +x /tmp/omarchy-plugin-validate
           /tmp/omarchy-plugin-validate omarchy-plugin

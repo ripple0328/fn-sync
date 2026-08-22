@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install validation tools
         run: |
@@ -23,7 +23,7 @@ jobs:
       - name: Download the current Omarchy validator
         run: |
           curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
+            https://raw.githubusercontent.com/basecamp/omarchy/ed7bae4ac5a570e9df307486e0202fdafcc6ee24/bin/omarchy-plugin-validate \
             --output /tmp/omarchy-plugin-validate
           chmod +x /tmp/omarchy-plugin-validate
 

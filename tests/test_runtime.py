@@ -1,7 +1,6 @@
 import contextlib
 import io
 import os
-import subprocess
 import sys
 import tempfile
 import types
@@ -63,11 +62,9 @@ class RuntimeBehaviorTests(unittest.TestCase):
         self.assertIn("timed out", captured)
 
     def test_secret_service_lookup_store_and_clear_paths(self):
-        success = subprocess.CompletedProcess(
-            ["secret-tool"], 0, "correct horse\n", ""
-        )
+        success = fnsync.BoundedProcessResult(0, "correct horse\n", "")
         with mock.patch.object(fnsync.shutil, "which", return_value="/usr/bin/secret-tool"), mock.patch.object(
-            fnsync.subprocess, "run", return_value=success
+            fnsync, "run_bounded_process", return_value=success
         ) as run:
             self.assertEqual(fnsync.secret_tool_lookup("nas123"), "correct horse")
             self.assertTrue(
@@ -75,12 +72,12 @@ class RuntimeBehaviorTests(unittest.TestCase):
             )
             fnsync.secret_tool_clear("nas123")
         self.assertEqual(run.call_count, 3)
-        self.assertEqual(run.call_args_list[1].kwargs["input"], "correct horse")
+        self.assertEqual(run.call_args_list[1].kwargs["input_text"], "correct horse")
         self.assertIn("clear", run.call_args_list[2].args[0])
 
-        empty = subprocess.CompletedProcess(["secret-tool"], 1, "", "locked")
+        empty = fnsync.BoundedProcessResult(1, "", "locked")
         with mock.patch.object(fnsync.shutil, "which", return_value="/usr/bin/secret-tool"), mock.patch.object(
-            fnsync.subprocess, "run", return_value=empty
+            fnsync, "run_bounded_process", return_value=empty
         ):
             with self.assertRaises(fnsync.FnSyncError):
                 fnsync.secret_tool_lookup("nas123")
@@ -113,14 +110,14 @@ class RuntimeBehaviorTests(unittest.TestCase):
         ) as run_task, mock.patch.object(
             fnsync.shutil, "which", return_value="/usr/bin/notify-send"
         ), mock.patch.object(
-            fnsync.subprocess, "run"
+            fnsync, "run_bounded_process"
         ) as notify, mock.patch.object(
             fnsync, "update_status"
         ) as update_status:
             self.assertEqual(fnsync.daemon_loop(once=True), 0)
         self.assertEqual(run_task.call_count, 4)
         notify.assert_called_once()
-        self.assertIn("FN sync failed", notify.call_args.args[0])
+        self.assertIn("FN sync needs attention", notify.call_args.args[0])
         update_status.assert_called_once()
         self.assertEqual(update_status.call_args.args[0], "error")
         self.assertEqual(update_status.call_args.kwargs["message"], "broken authorization")

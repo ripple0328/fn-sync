@@ -18,8 +18,8 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
       - name: Install the pinned runtime builder
@@ -27,7 +27,7 @@ jobs:
       - name: Build standalone plugin controller
         run: ./scripts/build-plugin-runtime.sh "${{ matrix.architecture }}" "$RUNNER_TEMP/plugin-runtime"
       - name: Upload standalone plugin controller
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-plugin-runtime-${{ matrix.architecture }}
           path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
@@ -41,11 +41,11 @@ jobs:
     steps:
       - name: Install release dependencies
         run: pacman -Syu --noconfirm git jq namcap pacman-contrib
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Download standalone plugin controllers
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: release-plugin-runtime-*
           path: build/plugin-runtime
@@ -64,7 +64,7 @@ jobs:
           runuser -u builder -- sh -c 'cd dist/aur/fn-sync && makepkg --verifysource'
           ./scripts/verify-package.sh
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-artifacts
           path: dist/
@@ -73,7 +73,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-artifacts
           path: dist
@@ -97,8 +97,8 @@ jobs:
     steps:
       - name: Install AUR publishing dependencies
         run: pacman -Syu --noconfirm git openssh
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-artifacts
           path: dist

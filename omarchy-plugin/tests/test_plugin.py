@@ -60,6 +60,39 @@ class PluginContractTests(unittest.TestCase):
         self.assertNotRegex(action, r"(?m)^\s*Text\s*\{")
         self.assertNotRegex(dropdown, r"(?m)^\s*Text\s*\{")
 
+    def test_connection_form_tests_and_saves_without_retaining_a_password_fingerprint(self):
+        panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+        controller = (ROOT / "controller" / "fnsync.py").read_text(encoding="utf-8")
+        self.assertIn('root.l10n("Test and save", "测试并保存")', panel)
+        self.assertIn("verify_connection_update(", controller)
+        self.assertNotIn("verifiedConnectionFingerprint", panel)
+        self.assertNotIn("connectionFingerprint", panel)
+        self.assertNotIn("pendingVerifyFingerprint", panel)
+
+    def test_controller_caps_external_output_and_persistent_collections(self):
+        controller = (ROOT / "controller" / "fnsync.py").read_text(encoding="utf-8")
+        for required in (
+            "MAX_CAPTURE_BYTES = 512 * 1024",
+            "MAX_FOLDER_JSON_BYTES = 1024 * 1024",
+            "MAX_STREAM_FORWARD_BYTES = 512 * 1024",
+            "MAX_CONNECTIONS = 64",
+            "MAX_TASKS = 256",
+            "MAX_FOLDER_ITEMS = 1000",
+            "def run_bounded_process(",
+            "queue.Queue(maxsize=32)",
+            "strict_output=False",
+            "planned_changes=dry_run_counter.finish()",
+        ):
+            self.assertIn(required, controller)
+        self.assertNotIn("capture_output=True", controller)
+        panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+        bar = (ROOT / "BarWidget.qml").read_text(encoding="utf-8")
+        self.assertNotIn("StdioCollector", panel + bar)
+        self.assertIn("maxJsonCaptureChars", panel)
+        self.assertIn("maxStatusCaptureChars", bar)
+        self.assertIn("appendCapture", panel)
+        self.assertIn("appendCapture", bar)
+
     def test_published_controller_source_and_provenance_are_auditable(self):
         controller = ROOT / "controller" / "fnsync.py"
         entrypoint = ROOT / "controller" / "entrypoint.py"
@@ -150,9 +183,15 @@ class PluginContractTests(unittest.TestCase):
         self.assertNotIn("command -v gjs", control)
         self.assertNotIn("command -v gtk4-launch", control)
         self.assertIn('if [ "$client_mode" = python ]; then', control)
-        self.assertIn("jq -cn", control)
-        self.assertIn('systemctl --user enable --now fnsync.service', control)
-        self.assertIn('systemctl --user restart fnsync.service', control)
+        self.assertNotIn("jq -cn", control)
+        self.assertIn('exec_client plugin-status --distribution "$client_distribution"', control)
+        self.assertIn('service_unit_name="community.fnos-sync.service"', control)
+        self.assertIn('systemctl --user enable --now "$service_unit_name"', control)
+        self.assertIn('systemctl --user restart "$service_unit_name"', control)
+        self.assertIn('service_owner_marker="# Managed by community.fnos-sync"', control)
+        self.assertIn('Refusing to replace a service unit not owned by the FN Sync plugin', control)
+        self.assertIn("exact signatures prove that it was created by this plugin", control)
+        self.assertIn("systemctl --user disable --now fnsync.service", control)
         self.assertIn('service_version_file="$service_state_dir/plugin-service-version"', control)
         self.assertIn("record_service_version", control)
         status_case = control.split('status)', 1)[1].split('bootstrap)', 1)[0]
@@ -235,7 +274,7 @@ class PluginContractTests(unittest.TestCase):
             client.write_text(
                 "#!/bin/sh\n"
                 f"printf '%s\\n' \"$FNSYNC_RCLONE\" > {log}\n"
-                "printf '[]\\n'\n",
+                "printf '{\"installed\":true,\"ready\":true,\"distribution\":\"plugin\",\"missing_dependencies\":\"\",\"tasks\":[],\"connections\":[],\"error\":\"\"}\\n'\n",
                 encoding="utf-8",
             )
             client.chmod(0o755)
@@ -270,6 +309,56 @@ class PluginContractTests(unittest.TestCase):
             self.assertEqual(payload["missing_dependencies"], "")
             self.assertEqual(log.read_text(encoding="utf-8").strip(), str(managed))
 
+    def test_plugin_refuses_to_replace_a_foreign_or_symlinked_service_unit(self):
+        with tempfile.TemporaryDirectory(prefix="fn-sync-foreign-unit-") as temp:
+            root = Path(temp)
+            home = root / "home"
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            rclone = fake_bin / "rclone"
+            rclone.write_text("#!/bin/sh\necho 'rclone v1.75.0'\n", encoding="utf-8")
+            rclone.chmod(0o755)
+            unit = home / ".config" / "systemd" / "user" / "community.fnos-sync.service"
+            unit.parent.mkdir(parents=True)
+            unit.write_text("# belongs to another application\n", encoding="utf-8")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home),
+                    "PATH": f"{fake_bin}:{env['PATH']}",
+                    "XDG_CONFIG_HOME": str(home / ".config"),
+                    "XDG_DATA_HOME": str(home / ".local" / "share"),
+                    "XDG_STATE_HOME": str(home / ".local" / "state"),
+                }
+            )
+            result = subprocess.run(
+                [str(ROOT / "scripts" / "fn-syncctl"), "status", "en"],
+                text=True,
+                capture_output=True,
+                env=env,
+                timeout=10,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 4)
+            self.assertIn("not owned by the FN Sync plugin", result.stderr)
+            self.assertEqual(unit.read_text(encoding="utf-8"), "# belongs to another application\n")
+
+            unit.unlink()
+            target = root / "outside.service"
+            target.write_text("outside\n", encoding="utf-8")
+            unit.symlink_to(target)
+            result = subprocess.run(
+                [str(ROOT / "scripts" / "fn-syncctl"), "status", "en"],
+                text=True,
+                capture_output=True,
+                env=env,
+                timeout=10,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 4)
+            self.assertIn("symbolic-link service unit", result.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "outside\n")
+
     def test_binary_plugin_runtime_needs_no_host_python(self):
         with tempfile.TemporaryDirectory(prefix="fn-sync-binary-runtime-") as temp:
             root = Path(temp)
@@ -282,8 +371,7 @@ class PluginContractTests(unittest.TestCase):
             runtime.write_text(
                 "#!/bin/sh\n"
                 "case \"${1:-}\" in\n"
-                "  status) printf '[]\\n' ;;\n"
-                "  connection) printf '[]\\n' ;;\n"
+                "  plugin-status) printf '{\"installed\":true,\"ready\":true,\"distribution\":\"plugin\",\"missing_dependencies\":\"\",\"tasks\":[],\"connections\":[],\"error\":\"\"}\\n' ;;\n"
                 "  plugin-discover) printf '{\"networks\":[],\"devices\":[],\"ports\":[]}\\n' ;;\n"
                 "  *) exit 2 ;;\n"
                 "esac\n",

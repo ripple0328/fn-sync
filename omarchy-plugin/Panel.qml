@@ -63,10 +63,6 @@ Panel {
     property bool connectionAllowHttp: false
     property bool connectionInsecureTls: false
     property string editingConnectionId: ""
-    property string verifiedConnectionFingerprint: ""
-    property string pendingVerifyFingerprint: ""
-    property string verifyStdout: ""
-    property string verifyStderr: ""
     property var discoveredDevices: []
     property string discoveryStdout: ""
     property string discoveryStderr: ""
@@ -79,6 +75,12 @@ Panel {
     property var browseFolders: []
     property string browseStdout: ""
     property string browseStderr: ""
+    property bool createCaptureOverflow: false
+    property bool discoveryCaptureOverflow: false
+    property bool browseCaptureOverflow: false
+
+    readonly property int maxJsonCaptureChars: 2 * 1024 * 1024
+    readonly property int maxErrorCaptureChars: 256 * 1024
 
     readonly property var barIdentity: hostWidget || root
     readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -86,13 +88,12 @@ Panel {
     readonly property color dimForeground: Qt.darker(foreground, 1.5)
     readonly property color urgent: bar ? bar.urgent : Color.urgent
     readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-    readonly property bool busy: actionProcess.running || createProcess.running || verifyProcess.running || folderProcess.running || syncing || installingDependencies
-    readonly property bool connectionVerifying: verifyProcess.running
+    readonly property bool busy: actionProcess.running || createProcess.running || folderProcess.running || syncing || installingDependencies
     readonly property bool connectionSaving: createProcess.running && createKind === "connection"
     readonly property bool connectionDiscovering: discoveryProcess.running
-    readonly property bool connectionFormBusy: createProcess.running || verifyProcess.running
+    readonly property bool connectionFormBusy: createProcess.running
     readonly property bool connectionFieldsComplete: connectionNameField.text.trim() !== "" && connectionUrlField.text.trim() !== "" && connectionUserField.text.trim() !== "" && (editingConnectionId !== "" || connectionPasswordField.text !== "")
-    readonly property bool connectionSaveReady: installed && runtimeReady && !connectionFormBusy && connectionFieldsComplete && (editingConnectionId !== "" || verifiedConnectionFingerprint === connectionFingerprint())
+    readonly property bool connectionSaveReady: installed && runtimeReady && !connectionFormBusy && connectionFieldsComplete
     readonly property int runningTaskCount: countTaskState("running")
     readonly property bool syncAllReady: installed && runtimeReady && enabledCount() > 0 && runningTaskCount === 0 && !busy
     readonly property bool createTaskReady: installed && runtimeReady && connections.length > 0 && !busy
@@ -366,6 +367,11 @@ Panel {
         return String(value || "").replace(/\s+/g, " ").trim();
     }
 
+    function appendCapture(current, line, limit) {
+        var next = String(current || "") + String(line || "") + "\n";
+        return next.length <= limit ? next : null;
+    }
+
     function localPath(url) {
         var value = String(url || "");
         if (value.indexOf("file://") === 0)
@@ -375,46 +381,6 @@ Panel {
         } catch (error) {
             return value;
         }
-    }
-
-    function connectionFingerprint() {
-        return JSON.stringify([connectionNameField.text.trim(), connectionUrlField.text.trim(), connectionUserField.text.trim(), connectionPasswordField.text, connectionAllowHttp, connectionInsecureTls]);
-    }
-
-    function invalidateConnectionTest() {
-        if (editingConnectionId !== "")
-            return;
-        verifiedConnectionFingerprint = "";
-        if (!verifyProcess.running) {
-            actionStatus = l10n("Not tested yet. Test login and folder navigation before saving.", "尚未测试。保存前请测试登录和文件夹浏览。");
-            actionError = "";
-        }
-    }
-
-    function testConnectionForm() {
-        if (connectionFormBusy || editingConnectionId !== "")
-            return;
-        var name = connectionNameField.text.trim();
-        var url = connectionUrlField.text.trim();
-        var username = connectionUserField.text.trim();
-        var password = connectionPasswordField.text;
-        if (name === "" || url === "" || username === "" || password === "") {
-            actionError = l10n("Complete every connection field before testing.", "测试前请填写所有连接字段。");
-            return;
-        }
-        var args = [controlPath, "cli", languagePreference, "connection", "verify", "--url", url, "--username", username, "--password-stdin", "--json"];
-        if (connectionAllowHttp)
-            args.push("--allow-http");
-        if (connectionInsecureTls)
-            args.push("--insecure-skip-verify");
-        pendingVerifyFingerprint = connectionFingerprint();
-        pendingPassword = password;
-        verifyStdout = "";
-        verifyStderr = "";
-        actionStatus = l10n("Testing login and reading the NAS folder list…", "正在测试登录并读取 NAS 文件夹列表…");
-        actionError = "";
-        verifyProcess.command = args;
-        verifyProcess.running = true;
     }
 
     function showRemoteFolderPicker() {
@@ -437,6 +403,7 @@ Panel {
         browseFolders = [];
         browseStdout = "";
         browseStderr = "";
+        browseCaptureOverflow = false;
         actionStatus = l10n("Loading NAS folders…", "正在加载 NAS 文件夹…");
         actionError = "";
         folderProcess.command = [controlPath, "cli", languagePreference, "connection", "folders", browseConnectionId, "--path", browsePath, "--json"];
@@ -647,7 +614,7 @@ Panel {
         page = "connection-form";
         clearMessages();
         if (!connection)
-            actionStatus = l10n("Not tested yet. Test login and folder navigation before saving.", "尚未测试。保存前请测试登录和文件夹浏览。");
+            actionStatus = l10n("Enter your account. FN sync will test login and folder access before saving anything.", "请输入账号。飞牛同步会先测试登录与文件夹访问，再保存任何信息。");
         if (panelFlick)
             panelFlick.contentY = 0;
         Qt.callLater(function () {
@@ -665,13 +632,12 @@ Panel {
         connectionUrlField.text = webdavUrl;
         connectionAllowHttp = webdavUrl !== "" && device.allow_http === true;
         connectionInsecureTls = webdavUrl !== "" && device.insecure_skip_verify === true;
-        invalidateConnectionTest();
         if (webdavUrl === "")
             actionStatus = l10n("fnOS found, but WebDAV is off or uses a custom port. Enable it in fnOS Settings → File Sharing Protocols, then scan again.", "已发现 fnOS，但 WebDAV 未开启或使用了自定义端口。请在 fnOS 设置 → 文件共享协议中启用，然后重新扫描。");
         else if (device.webdav_verified === true)
-            actionStatus = l10n("fnOS WebDAV found. Enter your account, then test the connection.", "已发现 fnOS WebDAV。请输入账号，然后测试连接。");
+            actionStatus = l10n("fnOS WebDAV found. Enter your account, then test and save.", "已发现 fnOS WebDAV。请输入账号，然后测试并保存。");
         else
-            actionStatus = l10n("A WebDAV port is open. Enter your account, then test the connection.", "已发现开放的 WebDAV 端口。请输入账号，然后测试连接。");
+            actionStatus = l10n("A WebDAV port is open. Enter your account, then test and save.", "已发现开放的 WebDAV 端口。请输入账号，然后测试并保存。");
         actionError = "";
     }
 
@@ -700,6 +666,7 @@ Panel {
         discoveredDevices = [];
         discoveryStdout = "";
         discoveryStderr = "";
+        discoveryCaptureOverflow = false;
         actionStatus = l10n("Scanning this LAN for fnOS…", "正在当前局域网中扫描 fnOS…");
         actionError = "";
         actionOutput = "";
@@ -768,6 +735,7 @@ Panel {
         createUsesPassword = false;
         createStdout = "";
         createStderr = "";
+        createCaptureOverflow = false;
         createProcess.command = [controlPath, "cli", languagePreference, "task", "add", "--name", name, "--connection", addConnectionId, "--remote-path", remote, "--local", local, "--mode", addMode];
         actionStatus = l10n("Creating sync task…", "正在创建同步任务…");
         actionError = "";
@@ -784,10 +752,6 @@ Panel {
         var password = connectionPasswordField.text;
         if (name === "" || url === "" || username === "" || (editingConnectionId === "" && password === "")) {
             actionError = editingConnectionId === "" ? l10n("Complete every connection field before authorizing.", "授权前请填写所有连接字段。") : l10n("Name, URL, and username are required. Leave password blank to keep it unchanged.", "名称、URL 和用户名为必填项；密码留空可保持不变。");
-            return;
-        }
-        if (editingConnectionId === "" && verifiedConnectionFingerprint !== connectionFingerprint()) {
-            actionError = l10n("Test login and folder navigation before saving this authorization.", "保存此授权前，请先测试登录和文件夹浏览。");
             return;
         }
         var args = [controlPath, "cli", languagePreference, "connection", editingConnectionId === "" ? "add" : "update"];
@@ -810,8 +774,9 @@ Panel {
         createKind = "connection";
         createStdout = "";
         createStderr = "";
+        createCaptureOverflow = false;
         createProcess.command = args;
-        actionStatus = editingConnectionId === "" ? l10n("Authorizing NAS…", "正在授权 NAS…") : l10n("Updating NAS authorization…", "正在更新 NAS 授权…");
+        actionStatus = editingConnectionId === "" ? l10n("Testing login and saving authorization…", "正在测试登录并保存授权…") : l10n("Testing and saving connection changes…", "正在测试并保存连接更改…");
         actionError = "";
         actionOutput = "";
         createProcess.running = true;
@@ -835,8 +800,6 @@ Panel {
         connectionPasswordField.text = "";
         connectionAllowHttp = false;
         connectionInsecureTls = false;
-        verifiedConnectionFingerprint = "";
-        pendingVerifyFingerprint = "";
     }
 
     Process {
@@ -888,18 +851,35 @@ Panel {
             root.pendingPassword = "";
             stdinEnabled = false;
         }
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.createStdout = text
+        stdout: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.createStdout, line, root.maxJsonCaptureChars);
+                if (next === null) {
+                    root.createCaptureOverflow = true;
+                    createProcess.running = false;
+                } else {
+                    root.createStdout = next;
+                }
+            }
         }
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.createStderr = text
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.createStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.createCaptureOverflow = true;
+                    createProcess.running = false;
+                } else {
+                    root.createStderr = next;
+                }
+            }
         }
         onExited: function (exitCode) {
             stdinEnabled = true;
             var message = root.displayOutput(root.createStdout, root.createStderr, false);
-            if (exitCode === 0) {
+            if (root.createCaptureOverflow) {
+                root.actionStatus = "";
+                root.actionError = root.l10n("The operation response exceeded the safe display limit", "操作响应超过安全显示上限");
+            } else if (exitCode === 0) {
                 root.actionError = "";
                 if (root.createKind === "task") {
                     root.actionStatus = root.l10n("Task created. Open it to complete the guided first sync.", "任务已创建。请打开任务完成首次同步引导。");
@@ -920,60 +900,40 @@ Panel {
     }
 
     Process {
-        id: verifyProcess
-        running: false
-        command: []
-        stdinEnabled: true
-        onStarted: {
-            write(root.pendingPassword + "\n");
-            root.pendingPassword = "";
-            stdinEnabled = false;
-        }
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.verifyStdout = text
-        }
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.verifyStderr = text
-        }
-        onExited: function (exitCode) {
-            stdinEnabled = true;
-            if (exitCode === 0) {
-                var payload = {};
-                try {
-                    payload = JSON.parse(root.verifyStdout || "{}");
-                } catch (error) {
-                    payload = {};
-                }
-                var folders = payload.folders instanceof Array ? payload.folders.length : 0;
-                root.verifiedConnectionFingerprint = root.pendingVerifyFingerprint;
-                root.actionStatus = root.l10n("Connection works; folder navigation returned " + folders + " root folder(s). You can now save.", "连接正常；文件夹浏览返回 " + folders + " 个根目录文件夹。现在可以保存。");
-                root.actionError = "";
-            } else {
-                root.verifiedConnectionFingerprint = "";
-                root.actionStatus = "";
-                root.actionError = root.displayOutput(root.verifyStdout, root.verifyStderr, false) || root.l10n("Connection test failed", "连接测试失败");
-            }
-            root.pendingVerifyFingerprint = "";
-        }
-    }
-
-    Process {
         id: discoveryProcess
         running: false
         command: []
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.discoveryStdout = text
+        stdout: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.discoveryStdout, line, root.maxJsonCaptureChars);
+                if (next === null) {
+                    root.discoveryCaptureOverflow = true;
+                    discoveryProcess.running = false;
+                } else {
+                    root.discoveryStdout = next;
+                }
+            }
         }
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.discoveryStderr = text
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.discoveryStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.discoveryCaptureOverflow = true;
+                    discoveryProcess.running = false;
+                } else {
+                    root.discoveryStderr = next;
+                }
+            }
         }
         onExited: function (exitCode) {
             if (root.runningDiscoveryGeneration !== root.discoveryGeneration || root.page !== "connection-form")
                 return;
+            if (root.discoveryCaptureOverflow) {
+                root.discoveredDevices = [];
+                root.actionStatus = "";
+                root.actionError = root.l10n("LAN scan output exceeded the safe display limit", "局域网扫描输出超过安全显示上限");
+                return;
+            }
             var payload = {};
             try {
                 payload = JSON.parse(root.discoveryStdout || "{}");
@@ -1012,16 +972,34 @@ Panel {
         id: folderProcess
         running: false
         command: []
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.browseStdout = text
+        stdout: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.browseStdout, line, root.maxJsonCaptureChars);
+                if (next === null) {
+                    root.browseCaptureOverflow = true;
+                    folderProcess.running = false;
+                } else {
+                    root.browseStdout = next;
+                }
+            }
         }
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.browseStderr = text
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.browseStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.browseCaptureOverflow = true;
+                    folderProcess.running = false;
+                } else {
+                    root.browseStderr = next;
+                }
+            }
         }
         onExited: function (exitCode) {
-            if (exitCode === 0) {
+            if (root.browseCaptureOverflow) {
+                root.browseFolders = [];
+                root.actionStatus = "";
+                root.actionError = root.l10n("The folder list exceeded the safe display limit", "文件夹列表超过安全显示上限");
+            } else if (exitCode === 0) {
                 try {
                     var payload = JSON.parse(root.browseStdout || "{}");
                     root.browseFolders = payload.folders instanceof Array ? payload.folders : [];
@@ -2556,7 +2534,6 @@ Panel {
                                 foreground: root.foreground
                                 accent: root.accent
                                 enabled: !root.connectionFormBusy
-                                onTextChanged: root.invalidateConnectionTest()
                                 onAccepted: connectionUrlField.forceActiveFocus()
                             }
                         }
@@ -2577,7 +2554,6 @@ Panel {
                                 foreground: root.foreground
                                 accent: root.accent
                                 enabled: !root.connectionFormBusy
-                                onTextChanged: root.invalidateConnectionTest()
                                 onAccepted: connectionUserField.forceActiveFocus()
                             }
                         }
@@ -2601,7 +2577,6 @@ Panel {
                                     foreground: root.foreground
                                     accent: root.accent
                                     enabled: !root.connectionFormBusy
-                                    onTextChanged: root.invalidateConnectionTest()
                                     onAccepted: connectionPasswordField.forceActiveFocus()
                                 }
                             }
@@ -2623,11 +2598,7 @@ Panel {
                                     foreground: root.foreground
                                     accent: root.accent
                                     enabled: !root.connectionFormBusy
-                                    onTextChanged: root.invalidateConnectionTest()
-                                    onAccepted: if (root.editingConnectionId === "")
-                                        root.testConnectionForm()
-                                    else
-                                        root.submitConnection()
+                                    onAccepted: root.submitConnection()
                                 }
                             }
                         }
@@ -2642,7 +2613,6 @@ Panel {
                             fontFamily: root.fontFamily
                             onClicked: {
                                 root.connectionAllowHttp = !root.connectionAllowHttp;
-                                root.invalidateConnectionTest();
                             }
                         }
                         Toggle {
@@ -2656,20 +2626,7 @@ Panel {
                             fontFamily: root.fontFamily
                             onClicked: {
                                 root.connectionInsecureTls = !root.connectionInsecureTls;
-                                root.invalidateConnectionTest();
                             }
-                        }
-                        Button {
-                            visible: root.editingConnectionId === ""
-                            width: parent.width
-                            text: root.connectionVerifying ? root.l10n("Testing login and folders…", "正在测试登录与文件夹…") : (root.verifiedConnectionFingerprint === root.connectionFingerprint() ? root.l10n("Test passed", "测试已通过") : root.l10n("Test login & folders", "测试登录与文件夹"))
-                            leftAlign: true
-                            bordered: true
-                            focusable: true
-                            enabled: !root.connectionFormBusy && root.connectionFieldsComplete && root.verifiedConnectionFingerprint !== root.connectionFingerprint()
-                            foreground: root.verifiedConnectionFingerprint === root.connectionFingerprint() ? root.accent : root.foreground
-                            fontFamily: root.fontFamily
-                            onClicked: root.testConnectionForm()
                         }
                         Row {
                             width: parent.width
@@ -2686,7 +2643,7 @@ Panel {
                             }
                             Button {
                                 width: (parent.width - parent.spacing) / 2
-                                text: root.connectionSaving ? root.l10n("Saving…", "正在保存…") : (root.editingConnectionId === "" ? root.l10n("Save authorization", "保存授权") : root.l10n("Save connection", "保存连接"))
+                                text: root.connectionSaving ? root.l10n("Testing and saving…", "正在测试并保存…") : (root.editingConnectionId === "" ? root.l10n("Test and save", "测试并保存") : root.l10n("Test and save changes", "测试并保存更改"))
                                 bordered: true
                                 focusable: true
                                 enabled: root.connectionSaveReady

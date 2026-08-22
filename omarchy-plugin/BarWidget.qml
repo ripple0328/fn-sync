@@ -16,6 +16,18 @@ BarWidget {
     property var connections: []
     property string statusError: ""
     property bool syncing: false
+    property string statusStdout: ""
+    property string statusStderr: ""
+    property string syncStderr: ""
+    property string bootstrapStderr: ""
+    property string dependencyStderr: ""
+    property bool statusCaptureOverflow: false
+    property bool syncCaptureOverflow: false
+    property bool bootstrapCaptureOverflow: false
+    property bool dependencyCaptureOverflow: false
+
+    readonly property int maxStatusCaptureChars: 4 * 1024 * 1024
+    readonly property int maxErrorCaptureChars: 256 * 1024
 
     readonly property string controlPath: root.localPath(Qt.resolvedUrl("scripts/fn-syncctl"))
     readonly property int refreshIntervalSec: Math.max(10, Number(settings && settings.refreshIntervalSec || 30))
@@ -59,6 +71,11 @@ BarWidget {
                 count++;
         }
         return count;
+    }
+
+    function appendCapture(current, line, limit) {
+        var next = String(current || "") + String(line || "") + "\n";
+        return next.length <= limit ? next : null;
     }
 
     function injectPanel() {
@@ -110,14 +127,20 @@ BarWidget {
     }
 
     function refreshStatus() {
-        if (!statusProcess.running)
+        if (!statusProcess.running) {
+            statusStdout = "";
+            statusStderr = "";
+            statusCaptureOverflow = false;
             statusProcess.running = true;
+        }
     }
 
     function syncNow() {
         if (!installed || !runtimeReady || syncProcess.running)
             return;
         syncing = true;
+        syncStderr = "";
+        syncCaptureOverflow = false;
         injectPanel();
         syncProcess.running = true;
     }
@@ -126,6 +149,8 @@ BarWidget {
         if (installingDependencies || dependencyProcess.running)
             return;
         installingDependencies = true;
+        dependencyStderr = "";
+        dependencyCaptureOverflow = false;
         statusError = "";
         injectPanel();
         dependencyProcess.running = true;
@@ -181,19 +206,37 @@ BarWidget {
     Process {
         id: statusProcess
         command: [root.controlPath, "status", root.languagePreference]
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.applyStatus(text)
+        stdout: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.statusStdout, line, root.maxStatusCaptureChars);
+                if (next === null) {
+                    root.statusCaptureOverflow = true;
+                    statusProcess.running = false;
+                } else {
+                    root.statusStdout = next;
+                }
+            }
         }
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                var value = String(text || "").trim();
-                if (value !== "")
-                    root.statusError = value;
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.statusStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.statusCaptureOverflow = true;
+                    statusProcess.running = false;
+                } else {
+                    root.statusStderr = next;
+                }
             }
         }
         onExited: function (exitCode) {
+            if (root.statusCaptureOverflow) {
+                root.statusError = root.l10n("FN sync status exceeded the safe display limit", "飞牛状态超过安全显示上限");
+            } else if (exitCode === 0) {
+                root.applyStatus(root.statusStdout);
+                var stderrValue = root.statusStderr.trim();
+                if (stderrValue !== "")
+                    root.statusError = stderrValue;
+            }
             if (exitCode !== 0 && root.statusError === "")
                 root.statusError = root.l10n("FN sync is unavailable", "飞牛不可用");
             root.injectPanel();
@@ -203,17 +246,24 @@ BarWidget {
     Process {
         id: syncProcess
         command: [root.controlPath, "sync", root.languagePreference]
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                var value = String(text || "").trim();
-                if (value !== "")
-                    root.statusError = value;
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.syncStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.syncCaptureOverflow = true;
+                    syncProcess.running = false;
+                } else {
+                    root.syncStderr = next;
+                }
             }
         }
         onExited: function (exitCode) {
             root.syncing = false;
-            if (exitCode === 0)
+            if (root.syncCaptureOverflow)
+                root.statusError = root.l10n("Sync output exceeded the safe display limit", "同步输出超过安全显示上限");
+            else if (root.syncStderr.trim() !== "")
+                root.statusError = root.syncStderr.trim();
+            else if (exitCode === 0)
                 root.statusError = "";
             root.refreshStatus();
             root.injectPanel();
@@ -223,15 +273,25 @@ BarWidget {
     Process {
         id: bootstrapProcess
         command: [root.controlPath, "bootstrap"]
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                var value = String(text || "").trim();
-                if (value !== "" && value.indexOf("Missing runtime dependencies:") !== 0)
-                    root.statusError = value;
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.bootstrapStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.bootstrapCaptureOverflow = true;
+                    bootstrapProcess.running = false;
+                } else {
+                    root.bootstrapStderr = next;
+                }
             }
         }
         onExited: function (exitCode) {
+            if (root.bootstrapCaptureOverflow)
+                root.statusError = root.l10n("Setup output exceeded the safe display limit", "设置输出超过安全显示上限");
+            else {
+                var value = root.bootstrapStderr.trim();
+                if (value !== "" && value.indexOf("Missing runtime dependencies:") !== 0)
+                    root.statusError = value;
+            }
             root.refreshStatus();
         }
     }
@@ -239,17 +299,24 @@ BarWidget {
     Process {
         id: dependencyProcess
         command: [root.controlPath, "install-dependencies", root.languagePreference]
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                var value = String(text || "").trim();
-                if (value !== "")
-                    root.statusError = value;
+        stderr: SplitParser {
+            onRead: function (line) {
+                var next = root.appendCapture(root.dependencyStderr, line, root.maxErrorCaptureChars);
+                if (next === null) {
+                    root.dependencyCaptureOverflow = true;
+                    dependencyProcess.running = false;
+                } else {
+                    root.dependencyStderr = next;
+                }
             }
         }
         onExited: function (exitCode) {
             root.installingDependencies = false;
-            if (exitCode === 0)
+            if (root.dependencyCaptureOverflow)
+                root.statusError = root.l10n("Setup output exceeded the safe display limit", "设置输出超过安全显示上限");
+            else if (root.dependencyStderr.trim() !== "")
+                root.statusError = root.dependencyStderr.trim();
+            else if (exitCode === 0)
                 root.statusError = "";
             else if (root.statusError === "")
                 root.statusError = root.l10n("Setup did not finish", "设置未完成");
@@ -262,8 +329,11 @@ BarWidget {
         interval: 500
         running: true
         repeat: false
-        onTriggered: if (!bootstrapProcess.running)
-            bootstrapProcess.running = true
+        onTriggered: if (!bootstrapProcess.running) {
+            root.bootstrapStderr = "";
+            root.bootstrapCaptureOverflow = false;
+            bootstrapProcess.running = true;
+        }
     }
 
     Timer {

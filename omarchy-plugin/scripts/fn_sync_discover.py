@@ -13,10 +13,13 @@ import concurrent.futures
 import http.client
 import ipaddress
 import json
+import os
 import re
+import selectors
 import socket
 import ssl
 import subprocess
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -24,6 +27,10 @@ CONNECT_TIMEOUT = 0.28
 HTTP_TIMEOUT = 0.9
 MAX_HOSTS_PER_NETWORK = 254
 MAX_WORKERS = 128
+MAX_NETWORKS = 4
+MAX_TOTAL_ADDRESSES = 1024
+MAX_DEVICES = 64
+MAX_IP_JSON_BYTES = 256 * 1024
 
 MANAGEMENT_PORTS = (
     (5667, "https"),
@@ -58,19 +65,48 @@ class ProbeResult:
 
 
 def _run_ip_json(args: list[str]) -> list[dict]:
+    process: subprocess.Popen[bytes] | None = None
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             ["ip", "-j", *args],
-            check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=2,
         )
-        payload = json.loads(completed.stdout or "[]")
+        assert process.stdout is not None
+        output = bytearray()
+        deadline = time.monotonic() + 2
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    process.terminate()
+                    return []
+                events = selector.select(min(0.2, remaining))
+                if not events:
+                    if process.poll() is not None:
+                        break
+                    continue
+                chunk = os.read(process.stdout.fileno(), 16384)
+                if not chunk:
+                    break
+                output.extend(chunk)
+                if len(output) > MAX_IP_JSON_BYTES:
+                    process.terminate()
+                    return []
+        if process.wait(timeout=max(0.01, deadline - time.monotonic())) != 0:
+            return []
+        payload = json.loads(bytes(output).decode("utf-8") or "[]")
         return payload if isinstance(payload, list) else []
-    except (FileNotFoundError, subprocess.SubprocessError, json.JSONDecodeError):
+    except (FileNotFoundError, OSError, subprocess.SubprocessError, UnicodeDecodeError, json.JSONDecodeError):
         return []
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
 
 
 def local_private_networks() -> list[ipaddress.IPv4Network]:
@@ -102,6 +138,8 @@ def local_private_networks() -> list[ipaddress.IPv4Network]:
         if key not in seen:
             seen.add(key)
             networks.append(network)
+            if len(networks) >= MAX_NETWORKS:
+                break
     return networks
 
 
@@ -219,7 +257,13 @@ def inspect_host(host: str, open_ports: set[int]) -> dict | None:
 
 
 def _addresses(networks: Iterable[ipaddress.IPv4Network]) -> list[str]:
-    return [str(address) for network in networks for address in network.hosts()]
+    addresses: list[str] = []
+    for network in networks:
+        for address in network.hosts():
+            addresses.append(str(address))
+            if len(addresses) >= MAX_TOTAL_ADDRESSES:
+                return addresses
+    return addresses
 
 
 def discover() -> dict:
@@ -247,6 +291,8 @@ def discover() -> dict:
         device = inspect_host(host, open_by_host[host])
         if device:
             devices.append(device)
+            if len(devices) >= MAX_DEVICES:
+                break
     return {
         "networks": [str(network) for network in networks],
         "devices": devices,

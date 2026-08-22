@@ -20,6 +20,7 @@ import queue
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,13 +34,32 @@ from typing import Any
 from urllib.parse import urlsplit
 
 APP_NAME = "fnsync"
-APP_VERSION = "0.10.2"
+APP_VERSION = "0.10.3"
 CONFIG_VERSION = 2
 MIN_RCLONE_VERSION = (1, 66, 0)
 MODES = ("two-way", "upload-only", "download-only")
 ACCESS_MARKER = "FN_SYNC_ACCESS_TEST"
 LEGACY_ACCESS_MARKER = ".fnsync-access"
 MAX_TASK_LOG_BYTES = 5 * 1024 * 1024
+MAX_CONFIG_BYTES = 1024 * 1024
+MAX_STATUS_BYTES = 1024 * 1024
+MAX_RCLONE_CONFIG_BYTES = 1024 * 1024
+MAX_CAPTURE_BYTES = 512 * 1024
+MAX_FOLDER_JSON_BYTES = 1024 * 1024
+MAX_STREAM_FORWARD_BYTES = 512 * 1024
+MAX_OUTPUT_LINE_BYTES = 64 * 1024
+MAX_CONNECTIONS = 64
+MAX_TASKS = 256
+MAX_FOLDER_ITEMS = 1000
+MAX_DISCOVERY_ITEMS = 64
+MAX_NAME_LENGTH = 128
+MAX_USERNAME_LENGTH = 256
+MAX_URL_LENGTH = 2048
+MAX_PATH_LENGTH = 4096
+MAX_PASSWORD_LENGTH = 4096
+MAX_FILTERS = 100
+MAX_FILTER_LENGTH = 512
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$")
 DEFAULT_FILTERS = (
     "- .fnsync-versions/**",
     "- **/.fnsync-versions/**",
@@ -83,6 +103,16 @@ class AccessMarkerError(FnSyncError):
     """A two-way task's access marker is missing or no longer trustworthy."""
 
     error_code = "access-marker"
+
+
+@dataclass
+class BoundedProcessResult:
+    returncode: int
+    stdout: str
+    stderr: str
+    timed_out: bool = False
+    overflow: str = ""
+    planned_changes: int = 0
 
 
 def _xdg_path(env_name: str, fallback: Path, suffix: str) -> Path:
@@ -153,13 +183,90 @@ def atomic_json_write(path: Path, value: Any, mode: int = 0o600) -> None:
             tmp.unlink()
 
 
-def load_json(path: Path, default: Any) -> Any:
+def atomic_text_write(path: Path, content: str, mode: int = 0o600) -> None:
+    encoded = content.encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+
+
+def read_limited_bytes(path: Path, max_bytes: int) -> bytes:
+    """Read a regular, non-symlink file without allowing unbounded allocation."""
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise FnSyncError(tr(f"Refusing to read a non-regular file: {path}", f"拒绝读取非普通文件: {path}"))
+        if metadata.st_size > max_bytes:
+            raise FnSyncError(tr(f"Refusing to read oversized file: {path}", f"拒绝读取过大的文件: {path}"))
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(fd, min(65536, max_bytes + 1 - total))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise FnSyncError(tr(f"Refusing to read oversized file: {path}", f"拒绝读取过大的文件: {path}"))
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def read_limited_text(path: Path, max_bytes: int) -> str:
+    try:
+        return read_limited_bytes(path, max_bytes).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise FnSyncError(tr(f"Could not decode {path} as UTF-8", f"无法将 {path} 解码为 UTF-8")) from exc
+
+
+def read_limited_tail(path: Path, max_bytes: int) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise FnSyncError(tr(f"Refusing to read a non-regular file: {path}", f"拒绝读取非普通文件: {path}"))
+        start = max(0, metadata.st_size - max_bytes)
+        os.lseek(fd, start, os.SEEK_SET)
+        remaining = min(metadata.st_size, max_bytes)
+        chunks: list[bytes] = []
+        while remaining > 0:
+            chunk = os.read(fd, min(65536, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        data = b"".join(chunks)
+        if start:
+            newline = data.find(b"\n")
+            if newline >= 0:
+                data = data[newline + 1 :]
+        return data
+    finally:
+        os.close(fd)
+
+
+def load_json(path: Path, default: Any, *, max_bytes: int = MAX_CONFIG_BYTES) -> Any:
     if not path.exists():
         return default
     try:
-        with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
+        return json.loads(read_limited_text(path, max_bytes))
+    except (OSError, json.JSONDecodeError, FnSyncError) as exc:
+        if isinstance(exc, FnSyncError):
+            raise
         raise FnSyncError(tr(f"Could not read {path}: {exc}", f"无法读取 {path}: {exc}")) from exc
 
 
@@ -219,6 +326,8 @@ def migrate_v1_store(store: dict[str, Any]) -> dict[str, Any]:
 def load_store() -> dict[str, Any]:
     path = runtime_paths()["tasks"]
     store = load_json(path, empty_store())
+    if not isinstance(store, dict):
+        raise FnSyncError(tr("The task configuration is invalid", "任务配置无效"))
     if store.get("version") == 1:
         migrated = migrate_v1_store(store)
         backup = path.with_name("tasks.v1.backup.json")
@@ -226,30 +335,55 @@ def load_store() -> dict[str, Any]:
             atomic_json_write(backup, store)
         atomic_json_write(path, migrated)
         store = migrated
-    if (
-        store.get("version") != CONFIG_VERSION
-        or not isinstance(store.get("connections"), list)
-        or not isinstance(store.get("tasks"), list)
-    ):
-        raise FnSyncError(tr("The task configuration version is not supported", "任务配置版本不受支持"))
+    validate_store_schema(store)
     return store
 
 
 def save_store(store: dict[str, Any]) -> None:
+    validate_store_schema(store)
     atomic_json_write(runtime_paths()["tasks"], store)
 
 
 def load_status() -> dict[str, Any]:
-    status = load_json(runtime_paths()["status"], {"tasks": {}})
+    status = load_json(runtime_paths()["status"], {"tasks": {}}, max_bytes=MAX_STATUS_BYTES)
+    if not isinstance(status, dict):
+        return {"tasks": {}}
     if not isinstance(status.get("tasks"), dict):
         return {"tasks": {}}
+    if len(status["tasks"]) > MAX_TASKS:
+        raise FnSyncError(tr("The status file contains too many tasks", "状态文件包含过多任务"))
+    for task_id, value in status["tasks"].items():
+        validate_identifier(str(task_id), "status task")
+        if not isinstance(value, dict):
+            raise FnSyncError(tr("The status file is invalid", "状态文件无效"))
     return status
 
 
+def open_lock_file(path: Path) -> Any:
+    flags = (
+        os.O_RDWR
+        | os.O_CREAT
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise FnSyncError(tr(f"Could not open lock file safely: {path}", f"无法安全打开锁文件: {path}")) from exc
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise FnSyncError(tr(f"Refusing a non-regular lock file: {path}", f"拒绝非普通锁文件: {path}"))
+    return os.fdopen(fd, "a+", encoding="utf-8")
+
+
 def update_status(task_id: str, **values: Any) -> None:
+    validate_identifier(task_id, "status task")
+    for key, value in tuple(values.items()):
+        if isinstance(value, str) and len(value) > 1000:
+            values[key] = value[:1000]
     ensure_runtime_dirs()
     lock_path = runtime_paths()["locks"] / "status.lock"
-    with lock_path.open("a+", encoding="utf-8") as handle:
+    with open_lock_file(lock_path) as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         try:
             status = load_status()
@@ -314,6 +448,8 @@ def hydrate_task(store: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_local_path(raw: str) -> Path:
+    if len(raw) > MAX_PATH_LENGTH or any(ord(char) < 32 for char in raw):
+        raise FnSyncError(tr("The local sync folder path is invalid or too long", "本地同步目录路径无效或过长"))
     path = Path(raw).expanduser().resolve()
     home = Path.home().resolve()
     forbidden = {Path("/"), home}
@@ -331,6 +467,8 @@ def validate_local_path(raw: str) -> Path:
 
 
 def validate_remote_path(raw: str) -> str:
+    if len(raw) > MAX_PATH_LENGTH:
+        raise FnSyncError(tr("The remote folder path is too long", "远端目录路径过长"))
     path = raw.strip().strip("/")
     if not path:
         raise FnSyncError(tr("The remote folder cannot be empty; choose a dedicated subfolder for this sync task", "远端目录不能为空；请为同步任务选择一个专用子目录"))
@@ -342,6 +480,8 @@ def validate_remote_path(raw: str) -> str:
 
 
 def validate_url(raw: str, allow_http: bool) -> str:
+    if len(raw) > MAX_URL_LENGTH:
+        raise FnSyncError(tr("The WebDAV address is too long", "WebDAV 地址过长"))
     if any(char.isspace() or ord(char) < 32 for char in raw):
         raise FnSyncError(tr("The WebDAV address cannot contain whitespace or control characters", "WebDAV 地址不能包含空白或控制字符"))
     value = raw.strip().rstrip("/") + "/"
@@ -413,6 +553,193 @@ def validate_task_isolation(
             )
 
 
+class _BoundedTail:
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.total = 0
+        self.data = bytearray()
+
+    def append(self, chunk: bytes) -> None:
+        self.total += len(chunk)
+        self.data.extend(chunk)
+        if len(self.data) > self.limit:
+            del self.data[: len(self.data) - self.limit]
+
+    def text(self) -> str:
+        return bytes(self.data).decode("utf-8", errors="replace")
+
+
+class _DryRunCounter:
+    def __init__(self) -> None:
+        self.pending = bytearray()
+        self.count = 0
+
+    def append(self, chunk: bytes) -> None:
+        self.pending.extend(chunk)
+        while True:
+            newline = self.pending.find(b"\n")
+            if newline < 0:
+                if len(self.pending) > MAX_OUTPUT_LINE_BYTES:
+                    self.pending.clear()
+                return
+            line = bytes(self.pending[:newline])
+            del self.pending[: newline + 1]
+            if b"Skipped " in line and b"--dry-run is set" in line:
+                self.count += 1
+
+    def finish(self) -> int:
+        if b"Skipped " in self.pending and b"--dry-run is set" in self.pending:
+            self.count += 1
+        self.pending.clear()
+        return self.count
+
+
+def _stop_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def run_bounded_process(
+    command: Sequence[str],
+    *,
+    input_text: str | None = None,
+    timeout: float,
+    stdout_limit: int = MAX_CAPTURE_BYTES,
+    stderr_limit: int = MAX_CAPTURE_BYTES,
+    strict_output: bool = True,
+    combine_output: bool = False,
+    forward_output: bool = False,
+) -> BoundedProcessResult:
+    """Run a child with hard in-flight memory caps on every output pipe.
+
+    Strict callers terminate on overflow because they need a complete response
+    (for example JSON). Long-running syncs retain only a bounded tail while an
+    independent incremental counter preserves dry-run totals.
+    """
+    if input_text is not None and len(input_text.encode("utf-8")) > MAX_PASSWORD_LENGTH + 1:
+        raise FnSyncError(tr("Input supplied to a helper command is too large", "提供给辅助命令的输入过大"))
+    stderr_target: int | None = subprocess.STDOUT if combine_output else subprocess.PIPE
+    try:
+        process = subprocess.Popen(
+            list(command),
+            stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=stderr_target,
+            bufsize=0,
+        )
+    except OSError as exc:
+        raise FnSyncError(tr(f"Could not start a helper command: {exc}", f"无法启动辅助命令: {exc}")) from exc
+
+    stdout_tail = _BoundedTail(stdout_limit)
+    stderr_tail = _BoundedTail(stderr_limit)
+    dry_run_counter = _DryRunCounter()
+    events: queue.Queue[tuple[str, bytes | None]] = queue.Queue(maxsize=32)
+    streams: list[tuple[str, Any]] = [("stdout", process.stdout)]
+    if not combine_output:
+        streams.append(("stderr", process.stderr))
+
+    def read_stream(name: str, pipe: Any) -> None:
+        try:
+            while True:
+                chunk = pipe.read(16384)
+                if not chunk:
+                    break
+                events.put((name, chunk))
+        finally:
+            events.put((name, None))
+
+    readers = [
+        threading.Thread(target=read_stream, args=(name, pipe), daemon=True)
+        for name, pipe in streams
+        if pipe is not None
+    ]
+    for reader in readers:
+        reader.start()
+
+    if process.stdin is not None:
+        try:
+            process.stdin.write((input_text or "").encode("utf-8"))
+            process.stdin.close()
+        except BrokenPipeError:
+            pass
+
+    deadline = time.monotonic() + timeout
+    active = len(readers)
+    timed_out = False
+    overflow = ""
+    forwarded = 0
+    forward_notice_sent = False
+    try:
+        while active:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 and process.poll() is None and not timed_out:
+                timed_out = True
+                _stop_process(process)
+            try:
+                name, chunk = events.get(timeout=max(0.01, min(0.2, max(0.0, remaining))))
+            except queue.Empty:
+                if process.poll() is not None and all(not reader.is_alive() for reader in readers):
+                    break
+                continue
+            if chunk is None:
+                active -= 1
+                continue
+            collector = stdout_tail if name == "stdout" else stderr_tail
+            collector.append(chunk)
+            dry_run_counter.append(chunk)
+            if strict_output and collector.total > collector.limit and not overflow:
+                overflow = name
+                _stop_process(process)
+            if forward_output:
+                remaining_forward = MAX_STREAM_FORWARD_BYTES - forwarded
+                if remaining_forward > 0:
+                    forwarded_chunk = chunk[:remaining_forward]
+                    clean = sanitize_output(forwarded_chunk.decode("utf-8", errors="replace"))
+                    print(clean, end="", flush="ERROR :" in clean or "NOTICE:" in clean)
+                    forwarded += len(forwarded_chunk)
+                elif not forward_notice_sent:
+                    print(
+                        tr(
+                            "\n[Further command output is hidden; FN sync is still running.]\n",
+                            "\n[后续命令输出已隐藏；飞牛同步仍在运行。]\n",
+                        ),
+                        end="",
+                        flush=True,
+                    )
+                    forward_notice_sent = True
+        if process.poll() is None:
+            remaining = max(0.0, deadline - time.monotonic())
+            try:
+                process.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _stop_process(process)
+    except KeyboardInterrupt:
+        _stop_process(process)
+        raise
+    finally:
+        for pipe in (process.stdout, None if combine_output else process.stderr):
+            if pipe is not None:
+                pipe.close()
+        for reader in readers:
+            reader.join(timeout=1)
+
+    return BoundedProcessResult(
+        returncode=124 if timed_out else (125 if overflow else int(process.returncode or 0)),
+        stdout=stdout_tail.text(),
+        stderr=stderr_tail.text(),
+        timed_out=timed_out,
+        overflow=overflow,
+        planned_changes=dry_run_counter.finish(),
+    )
+
+
 def rclone_binary() -> str:
     candidate = os.environ.get("FNSYNC_RCLONE") or shutil.which("rclone")
     if not candidate:
@@ -422,12 +749,11 @@ def rclone_binary() -> str:
 
 def rclone_version(binary: str | None = None) -> tuple[int, int, int]:
     binary = binary or rclone_binary()
-    try:
-        result = subprocess.run(
-            [binary, "version"], capture_output=True, text=True, timeout=15, check=False
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise FnSyncError(tr(f"Could not run rclone: {exc}", f"无法执行 rclone: {exc}")) from exc
+    result = run_bounded_process([binary, "version"], timeout=15, stdout_limit=65536, stderr_limit=65536)
+    if result.timed_out:
+        raise FnSyncError(tr("Could not run rclone: timed out", "无法执行 rclone：超时"))
+    if result.overflow:
+        raise FnSyncError(tr("Could not determine the rclone version: output was too large", "无法识别 rclone 版本：输出过大"))
     match = re.search(r"rclone v(\d+)\.(\d+)(?:\.(\d+))?", result.stdout + result.stderr)
     if result.returncode or not match:
         raise FnSyncError(tr("Could not determine the rclone version", "无法识别 rclone 版本"))
@@ -466,23 +792,25 @@ def _load_rclone_config() -> configparser.ConfigParser:
     parser.optionxform = str  # type: ignore[method-assign]
     path = runtime_paths()["rclone"]
     if path.exists():
-        parser.read(path, encoding="utf-8")
+        try:
+            parser.read_string(read_limited_text(path, MAX_RCLONE_CONFIG_BYTES))
+        except configparser.Error as exc:
+            raise FnSyncError(tr("The rclone configuration is invalid", "rclone 配置无效")) from exc
+        if len(parser.sections()) > MAX_CONNECTIONS + 16:
+            raise FnSyncError(tr("The rclone configuration contains too many remotes", "rclone 配置包含过多远端"))
     return parser
 
 
 def obscure_password(password: str) -> str:
     binary = require_rclone()
-    try:
-        result = subprocess.run(
-            [binary, "obscure", "-"],
-            input=password + "\n",
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise FnSyncError(tr(f"Could not protect the WebDAV password: {exc}", f"无法保护 WebDAV 密码: {exc}")) from exc
+    validate_password(password)
+    result = run_bounded_process(
+        [binary, "obscure", "-"],
+        input_text=password + "\n",
+        timeout=15,
+        stdout_limit=65536,
+        stderr_limit=65536,
+    )
     if result.returncode or not result.stdout.strip():
         raise FnSyncError(tr("rclone could not protect the WebDAV password", "rclone 无法保护 WebDAV 密码"))
     return result.stdout.strip()
@@ -497,15 +825,14 @@ def secret_tool_store(
     if not binary:
         return False
     try:
-        result = subprocess.run(
+        result = run_bounded_process(
             [binary, "store", "--label", label, "application", APP_NAME, attribute, secret_id],
-            input=password,
-            capture_output=True,
-            text=True,
+            input_text=password,
             timeout=20,
-            check=False,
+            stdout_limit=65536,
+            stderr_limit=65536,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except FnSyncError:
         return False
     return result.returncode == 0
 
@@ -514,16 +841,12 @@ def secret_tool_lookup(secret_id: str, attribute: str = "connection") -> str:
     binary = shutil.which("secret-tool")
     if not binary:
         raise FnSyncError(tr("The task password is in the desktop keyring, but secret-tool was not found", "任务密码保存在桌面密钥环，但未找到 secret-tool"))
-    try:
-        result = subprocess.run(
-            [binary, "lookup", "application", APP_NAME, attribute, secret_id],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise FnSyncError(tr(f"Could not read the desktop keyring: {exc}", f"无法读取桌面密钥环: {exc}")) from exc
+    result = run_bounded_process(
+        [binary, "lookup", "application", APP_NAME, attribute, secret_id],
+        timeout=20,
+        stdout_limit=MAX_PASSWORD_LENGTH + 1,
+        stderr_limit=65536,
+    )
     password = result.stdout.rstrip("\r\n")
     if result.returncode or not password:
         raise FnSyncError(tr("Could not read this task's WebDAV password from the desktop keyring", "无法从桌面密钥环读取该任务的 WebDAV 密码"))
@@ -534,13 +857,12 @@ def secret_tool_clear(secret_id: str, attribute: str = "connection") -> None:
     binary = shutil.which("secret-tool")
     if not binary:
         return
-    with contextlib.suppress(OSError, subprocess.TimeoutExpired):
-        subprocess.run(
+    with contextlib.suppress(FnSyncError):
+        run_bounded_process(
             [binary, "clear", "application", APP_NAME, attribute, secret_id],
-            capture_output=True,
-            text=True,
             timeout=15,
-            check=False,
+            stdout_limit=65536,
+            stderr_limit=65536,
         )
 
 
@@ -621,19 +943,9 @@ def task_rclone_config(task: dict[str, Any]) -> Iterator[Path]:
 
 
 @contextlib.contextmanager
-def temporary_connection_config(url: str, username: str, password: str) -> Iterator[Path]:
-    """Create a short-lived config for pre-save verification without persisting credentials."""
+def temporary_parser_config(parser: configparser.ConfigParser, prefix: str) -> Iterator[Path]:
     ensure_runtime_dirs()
-    parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str  # type: ignore[method-assign]
-    parser["fnsync_verify"] = {
-        "type": "webdav",
-        "url": url,
-        "vendor": "other",
-        "user": username,
-        "pass": obscure_password(password),
-    }
-    fd, tmp_name = tempfile.mkstemp(prefix=".verify-rclone.", dir=runtime_paths()["state_dir"])
+    fd, tmp_name = tempfile.mkstemp(prefix=prefix, dir=runtime_paths()["state_dir"])
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -647,14 +959,33 @@ def temporary_connection_config(url: str, username: str, password: str) -> Itera
             tmp.unlink()
 
 
+@contextlib.contextmanager
+def temporary_connection_config(url: str, username: str, password: str) -> Iterator[Path]:
+    """Create a short-lived config for pre-save verification without persisting credentials."""
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str  # type: ignore[method-assign]
+    parser["fnsync_verify"] = {
+        "type": "webdav",
+        "url": url,
+        "vendor": "other",
+        "user": username,
+        "pass": obscure_password(password),
+    }
+    with temporary_parser_config(parser, ".verify-rclone.") as path:
+        yield path
+
+
 def filter_file(task: dict[str, Any]) -> Path:
-    path = runtime_paths()["filters"] / f"{task['id']}.rules"
+    task_id = validate_identifier(str(task["id"]), "task")
+    path = runtime_paths()["filters"] / f"{task_id}.rules"
     rules = list(DEFAULT_FILTERS)
     rules.extend(task.get("filters", []))
     content = "\n".join(rules) + "\n"
-    if not path.exists() or path.read_text(encoding="utf-8") != content:
-        path.write_text(content, encoding="utf-8")
-        path.chmod(0o600)
+    current = ""
+    if path.exists():
+        current = read_limited_text(path, MAX_FILTERS * (MAX_FILTER_LENGTH + 1) + 4096)
+    if current != content:
+        atomic_text_write(path, content)
     return path
 
 
@@ -757,6 +1088,7 @@ class CommandResult:
     output: str
     command: list[str]
     streamed: bool = False
+    planned_changes: int = 0
 
 
 def sanitize_output(output: str) -> str:
@@ -791,103 +1123,36 @@ def planned_change_count(output: str) -> int:
     )
 
 
-def run_streaming(command: list[str], timeout: int) -> tuple[subprocess.CompletedProcess[str], str]:
-    """Run an interactive CLI action while forwarding sanitized progress."""
-    started = time.monotonic()
-    chunks: list[str] = []
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    assert process.stdout is not None
+def run_streaming(command: list[str], timeout: int) -> tuple[BoundedProcessResult, str]:
+    """Run an interactive action with bounded retention and forwarding."""
     previous_sigterm = signal.getsignal(signal.SIGTERM)
-    stream: queue.Queue[str | None] = queue.Queue()
-
-    def read_stream() -> None:
-        try:
-            for line in process.stdout:
-                stream.put(line)
-        finally:
-            stream.put(None)
-
-    reader = threading.Thread(target=read_stream, name="fn-sync-output", daemon=True)
-    reader.start()
 
     def interrupt_stream(_signum: int, _frame: Any) -> None:
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupt_stream)
-    timed_out = False
-
-    def forward(line: str) -> None:
-        clean = sanitize_output(line)
-        chunks.append(clean)
-        # Let ordinary per-file dry-run lines use normal pipe buffering.
-        # Flush stats and failures immediately so the panel stays live
-        # without forcing one system call for every planned file.
-        flush_progress = bool(
-            "ERROR :" in clean
-            or "Failed to" in clean
-            or re.search(r"NOTICE:.*\s/\s.*%", clean)
-        )
-        print(clean, end="", flush=flush_progress)
-
     try:
-        while True:
-            remaining = timeout - (time.monotonic() - started)
-            if remaining <= 0 and process.poll() is None:
-                timed_out = True
-                process.terminate()
-                break
-            try:
-                line = stream.get(timeout=max(0.01, min(0.2, max(0.0, remaining))))
-            except queue.Empty:
-                if process.poll() is not None and not reader.is_alive():
-                    break
-                continue
-            if line is None:
-                break
-            forward(line)
-        if timed_out:
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-        else:
-            process.wait()
-    except KeyboardInterrupt:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-        raise
+        result = run_bounded_process(
+            command,
+            timeout=timeout,
+            stdout_limit=MAX_CAPTURE_BYTES,
+            strict_output=False,
+            combine_output=True,
+            forward_output=True,
+        )
     finally:
-        reader.join(timeout=1)
-        while True:
-            try:
-                remaining_line = stream.get_nowait()
-            except queue.Empty:
-                break
-            if remaining_line is not None:
-                forward(remaining_line)
-        process.stdout.close()
         signal.signal(signal.SIGTERM, previous_sigterm)
-    output = "".join(chunks)
-    if timed_out:
+    output = sanitize_output(result.stdout)
+    if result.timed_out:
         timeout_message = tr(
             "The task timed out and this run was stopped.",
             "任务超时，已停止本次运行。",
         )
         output += "\n" + timeout_message + "\n"
         print(timeout_message, flush=True)
-        return subprocess.CompletedProcess(command, 124, output, timeout_message), output
-    return subprocess.CompletedProcess(command, process.returncode, output, ""), output
+    elif result.returncode:
+        print("\n" + failure_summary(output) + "\n", end="", flush=True)
+    return result, output
 
 
 def normalize_browse_path(raw: str) -> str:
@@ -902,15 +1167,21 @@ def _folder_items(output: str, parent: str) -> list[dict[str, str]]:
         raise FnSyncError(tr("The NAS returned an invalid folder listing", "NAS 返回了无效的文件夹列表")) from exc
     if not isinstance(raw_items, list):
         raise FnSyncError(tr("The NAS returned an invalid folder listing", "NAS 返回了无效的文件夹列表"))
+    if len(raw_items) > MAX_FOLDER_ITEMS:
+        raise FnSyncError(tr("The NAS folder listing contains too many items", "NAS 文件夹列表项目过多"))
     folders: list[dict[str, str]] = []
     for item in raw_items:
         if not isinstance(item, dict) or not item.get("IsDir"):
             continue
         name = str(item.get("Name") or "").strip("/")
-        if not name or name in {".", ".."} or "/" in name:
+        if not name or len(name) > 255 or name in {".", ".."} or "/" in name or any(ord(char) < 32 for char in name):
             continue
         path = f"{parent}/{name}" if parent else name
+        if len(path) > MAX_PATH_LENGTH:
+            continue
         folders.append({"name": name, "path": path})
+        if len(folders) > MAX_FOLDER_ITEMS:
+            raise FnSyncError(tr("The NAS folder listing contains too many folders", "NAS 文件夹列表包含过多文件夹"))
     return sorted(folders, key=lambda item: item["name"].casefold())
 
 
@@ -937,16 +1208,16 @@ def _run_folder_listing(
     ]
     if insecure_skip_verify:
         command.append("--no-check-certificate")
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise FnSyncError(tr(f"Could not browse NAS folders: {exc}", f"无法浏览 NAS 文件夹: {exc}")) from exc
+    result = run_bounded_process(
+        command,
+        timeout=45,
+        stdout_limit=MAX_FOLDER_JSON_BYTES,
+        stderr_limit=MAX_CAPTURE_BYTES,
+    )
+    if result.timed_out:
+        raise FnSyncError(tr("Browsing NAS folders timed out", "浏览 NAS 文件夹超时"))
+    if result.overflow:
+        raise FnSyncError(tr("The NAS folder listing was too large", "NAS 文件夹列表过大"))
     output = sanitize_output((result.stdout or "") + (result.stderr or ""))
     if result.returncode:
         raise FnSyncError(last_meaningful_line(output))
@@ -986,11 +1257,48 @@ def verify_unsaved_connection(
         )
 
 
+def verify_connection_update(
+    connection: dict[str, Any],
+    *,
+    url: str,
+    username: str,
+    password: str | None,
+    insecure_skip_verify: bool,
+) -> None:
+    """Test the complete prospective connection before mutating saved state."""
+    current = _load_rclone_config()
+    remote_name = str(connection["remote_name"])
+    if not current.has_section(remote_name):
+        raise FnSyncError(tr("The NAS connection's rclone configuration does not exist", "NAS 连接的 rclone 配置不存在"))
+    candidate = configparser.ConfigParser(interpolation=None)
+    candidate.optionxform = str  # type: ignore[method-assign]
+    candidate[remote_name] = dict(current[remote_name])
+    candidate[remote_name]["url"] = url
+    candidate[remote_name]["user"] = username
+    if password is not None:
+        candidate[remote_name]["pass"] = obscure_password(password)
+    elif connection.get("credential_backend") == "secret-service":
+        candidate[remote_name]["pass"] = obscure_password(
+            secret_tool_lookup(
+                str(connection.get("secret_id") or connection["id"]),
+                str(connection.get("secret_attribute") or "connection"),
+            )
+        )
+    with temporary_parser_config(candidate, ".verify-update-rclone.") as config_path:
+        _run_folder_listing(
+            remote_name,
+            "",
+            config_path,
+            insecure_skip_verify=insecure_skip_verify,
+        )
+
+
 @contextlib.contextmanager
 def task_lock(task_id: str) -> Iterator[None]:
     ensure_runtime_dirs()
-    path = runtime_paths()["locks"] / f"{task_id}.lock"
-    with path.open("a+", encoding="utf-8") as handle:
+    safe_task_id = validate_identifier(task_id, "task lock")
+    path = runtime_paths()["locks"] / f"{safe_task_id}.lock"
+    with open_lock_file(path) as handle:
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
@@ -1041,39 +1349,30 @@ def run_rclone(
                 if streamed:
                     result, output = run_streaming(command, command_timeout)
                 else:
-                    result = subprocess.run(
+                    result = run_bounded_process(
                         command,
-                        capture_output=True,
-                        text=True,
                         timeout=command_timeout,
-                        check=False,
+                        stdout_limit=MAX_CAPTURE_BYTES,
+                        strict_output=False,
+                        combine_output=True,
                     )
-                    output = sanitize_output((result.stdout or "") + (result.stderr or ""))
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-            stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
-            output = sanitize_output(stdout + stderr)
-            timeout_message = tr("The task timed out", "任务超时")
-            result = subprocess.CompletedProcess(command, 124, output, timeout_message)
-            output += "\n" + tr("The task timed out and this run was stopped.", "任务超时，已停止本次运行。") + "\n"
+                    output = sanitize_output(result.stdout)
+                    if result.timed_out:
+                        output += "\n" + tr("The task timed out and this run was stopped.", "任务超时，已停止本次运行。") + "\n"
         except KeyboardInterrupt:
             output = tr(
                 "First-sync check stopped by the user; no files were changed.",
                 "用户已停止首次同步检查；未修改任何文件。",
             ) + "\n"
-            result = subprocess.CompletedProcess(command, 130, "", output)
-        except (FnSyncError, OSError) as exc:
+            result = BoundedProcessResult(130, "", output)
+        except FnSyncError as exc:
             output = sanitize_output(str(exc)) + "\n"
-            result = subprocess.CompletedProcess(command, 2, "", output)
+            result = BoundedProcessResult(2, "", output)
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        rotate_task_log(log_path)
-        with log_path.open("a", encoding="utf-8") as log:
-            log.write(f"\n===== {started} {status_action} dry_run={dry_run} =====\n")
-            log.write(output)
-            if output and not output.endswith("\n"):
-                log.write("\n")
-        with contextlib.suppress(PermissionError):
-            log_path.chmod(0o600)
+        entry = f"\n===== {started} {status_action} dry_run={dry_run} =====\n" + output
+        if output and not output.endswith("\n"):
+            entry += "\n"
+        append_task_log(log_path, entry)
         state = "ok" if result.returncode == 0 else ("cancelled" if result.returncode == 130 else "error")
         message = tr("Complete", "完成") if result.returncode == 0 else failure_summary(output)
         update_status(
@@ -1084,7 +1383,7 @@ def run_rclone(
             exit_code=result.returncode,
             message=message,
             dry_run=dry_run,
-            planned_changes=planned_change_count(output) if dry_run else 0,
+            planned_changes=result.planned_changes if dry_run else 0,
             **details,
         )
         return CommandResult(
@@ -1092,6 +1391,7 @@ def run_rclone(
             output,
             command,
             streamed=os.environ.get("FNSYNC_STREAM_OUTPUT") == "1",
+            planned_changes=result.planned_changes,
         )
 
 
@@ -1103,12 +1403,18 @@ def last_meaningful_line(output: str) -> str:
 def rotate_task_log(path: Path, max_bytes: int = MAX_TASK_LOG_BYTES) -> None:
     """Keep one bounded previous task log instead of growing without limit."""
     try:
-        if path.stat().st_size <= max_bytes:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode):
+            raise FnSyncError(tr("Refusing to use a non-regular task log", "拒绝使用非普通任务日志"))
+        if metadata.st_size <= max_bytes:
             return
     except FileNotFoundError:
         return
     rotated = path.with_suffix(path.suffix + ".1")
-    with contextlib.suppress(FileNotFoundError):
+    if rotated.exists() or rotated.is_symlink():
+        rotated_metadata = rotated.lstat()
+        if not stat.S_ISREG(rotated_metadata.st_mode):
+            raise FnSyncError(tr("Refusing to replace a non-regular rotated task log", "拒绝替换非普通轮换任务日志"))
         rotated.unlink()
     path.replace(rotated)
     if rotated.stat().st_size > max_bytes:
@@ -1124,11 +1430,64 @@ def rotate_task_log(path: Path, max_bytes: int = MAX_TASK_LOG_BYTES) -> None:
         rotated.chmod(0o600)
 
 
+def trim_file_tail(path: Path, max_bytes: int) -> None:
+    """Atomically retain at most the final max_bytes of a regular log file."""
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(metadata.st_mode):
+        raise FnSyncError(tr("Refusing to trim a non-regular task log", "拒绝截断非普通任务日志"))
+    if metadata.st_size <= max_bytes:
+        return
+    tail = read_limited_tail(path, max_bytes)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as destination:
+            destination.write(tail)
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+
+
+def append_task_log(path: Path, content: str) -> None:
+    rotate_task_log(path)
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_APPEND
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise FnSyncError(tr("Could not open the task log safely", "无法安全打开任务日志")) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise FnSyncError(tr("Refusing to write a non-regular task log", "拒绝写入非普通任务日志"))
+        data = content.encode("utf-8")
+        view = memoryview(data)
+        while view:
+            written = os.write(fd, view)
+            view = view[written:]
+        os.fsync(fd)
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+    trim_file_tail(path, MAX_TASK_LOG_BYTES)
+
+
 def access_marker_text(task: dict[str, Any]) -> str:
     return f"fn-sync access marker for task {task['id']}\n"
 
 
-def _remote_marker_read(task: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+def _remote_marker_read(task: dict[str, Any]) -> BoundedProcessResult:
     binary = require_rclone()
     with task_rclone_config(task) as config_path:
         command = [
@@ -1145,29 +1504,31 @@ def _remote_marker_read(task: dict[str, Any]) -> subprocess.CompletedProcess[str
         ]
         if task.get("insecure_skip_verify"):
             command.append("--no-check-certificate")
-        try:
-            return subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
+        result = run_bounded_process(
+            command,
+            timeout=60,
+            stdout_limit=4096,
+            stderr_limit=65536,
+        )
+        if result.timed_out:
             raise FnSyncError(
                 tr(
                     "The NAS safety preflight timed out; FN sync will retry later.",
                     "NAS 安全预检超时；飞牛稍后将重试。",
                 )
-            ) from exc
+            )
+        if result.overflow:
+            raise FnSyncError(tr("The NAS safety marker response was too large", "NAS 安全标记响应过大"))
+        return result
 
 
 def verify_access_markers(task: dict[str, Any]) -> None:
     expected = access_marker_text(task)
-    marker = Path(task["local_path"]) / ACCESS_MARKER
+    local = verified_task_local_path(task)
+    marker = local / ACCESS_MARKER
     try:
-        local_value = marker.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError) as exc:
+        local_value = read_limited_text(marker, 4096)
+    except (FileNotFoundError, OSError, FnSyncError) as exc:
         raise AccessMarkerError(
             tr(
                 "Safety check paused this task because its local FN sync marker is missing. No files were changed. Confirm both task folders, then repair the safety check.",
@@ -1240,11 +1601,17 @@ def preflight_access_markers(task: dict[str, Any]) -> None:
 
 
 def ensure_access_markers(task: dict[str, Any]) -> CommandResult:
-    local = Path(task["local_path"])
+    local = verified_task_local_path(task, must_exist=False)
     local.mkdir(parents=True, exist_ok=True)
     marker = local / ACCESS_MARKER
-    marker.write_text(access_marker_text(task), encoding="utf-8")
-    marker.chmod(0o600)
+    if marker.is_symlink():
+        raise AccessMarkerError(
+            tr(
+                "Safety check refused a symbolic-link marker in the local task folder.",
+                "安全检查拒绝本地任务文件夹中的符号链接标记。",
+            )
+        )
+    atomic_text_write(marker, access_marker_text(task))
     result = run_rclone(
         task,
         [
@@ -1344,7 +1711,7 @@ def preview_initial(task: dict[str, Any], winner: str) -> CommandResult:
         saved["first_sync_check"] = {
             "conflict_winner": winner,
             "checked_at": now_iso(),
-            "planned_changes": planned_change_count(result.output),
+            "planned_changes": result.planned_changes,
         }
         saved["updated_at"] = now_iso()
         save_store(store)
@@ -1483,16 +1850,147 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def validate_connection_name(raw: str) -> str:
     name = raw.strip()
-    if not name or any(char in name for char in ("\n", "\r")):
-        raise FnSyncError(tr("The NAS connection name cannot be empty or contain a newline", "NAS 连接名称不能为空或包含换行"))
+    if not name:
+        raise FnSyncError(tr("The NAS connection name cannot be empty", "NAS 连接名称不能为空"))
+    if len(name) > MAX_NAME_LENGTH or any(ord(char) < 32 for char in name):
+        raise FnSyncError(tr("The NAS connection name is invalid or too long", "NAS 连接名称无效或过长"))
     return name
 
 
 def validate_username(raw: str) -> str:
     username = raw.strip()
-    if not username or any(char in username for char in ("\n", "\r")):
-        raise FnSyncError(tr("The WebDAV username cannot be empty or contain a newline", "WebDAV 用户名不能为空或包含换行"))
+    if not username:
+        raise FnSyncError(tr("The WebDAV username cannot be empty", "WebDAV 用户名不能为空"))
+    if len(username) > MAX_USERNAME_LENGTH or any(ord(char) < 32 for char in username):
+        raise FnSyncError(tr("The WebDAV username is invalid or too long", "WebDAV 用户名无效或过长"))
     return username
+
+
+def validate_password(password: str) -> str:
+    if not password or len(password.encode("utf-8")) > MAX_PASSWORD_LENGTH or "\x00" in password:
+        raise FnSyncError(tr("The WebDAV password is empty, invalid, or too long", "WebDAV 密码为空、无效或过长"))
+    return password
+
+
+def validate_identifier(raw: str, label: str) -> str:
+    if not SAFE_ID.fullmatch(raw):
+        raise FnSyncError(tr(f"The {label} ID is invalid", f"{label} ID 无效"))
+    return raw
+
+
+def validate_task_name(raw: str) -> str:
+    name = raw.strip()
+    if not name or len(name) > MAX_NAME_LENGTH or any(ord(char) < 32 for char in name):
+        raise FnSyncError(tr("The task name is empty, invalid, or too long", "任务名称为空、无效或过长"))
+    return name
+
+
+def verified_task_local_path(task: dict[str, Any], *, must_exist: bool = True) -> Path:
+    saved = str(task.get("local_path") or "")
+    path = validate_local_path(saved)
+    if str(path) != saved:
+        raise AccessMarkerError(
+            tr(
+                "Safety check paused this task because its local folder now resolves to a different path.",
+                "安全检查已暂停此任务，因为本地文件夹现在解析为不同路径。",
+            )
+        )
+    if must_exist and (not path.exists() or not path.is_dir()):
+        raise AccessMarkerError(tr("The local task folder no longer exists", "本地任务文件夹已不存在"))
+    return path
+
+
+def validate_store_schema(store: Any) -> None:
+    if not isinstance(store, dict) or store.get("version") != CONFIG_VERSION:
+        raise FnSyncError(tr("The task configuration version is not supported", "任务配置版本不受支持"))
+    connections = store.get("connections")
+    tasks = store.get("tasks")
+    if not isinstance(connections, list) or not isinstance(tasks, list):
+        raise FnSyncError(tr("The task configuration is invalid", "任务配置无效"))
+    if len(connections) > MAX_CONNECTIONS or len(tasks) > MAX_TASKS:
+        raise FnSyncError(tr("The task configuration contains too many items", "任务配置包含过多项目"))
+
+    connection_ids: set[str] = set()
+    remote_names: set[str] = set()
+    connection_pairs: set[tuple[str, str]] = set()
+    for connection in connections:
+        if not isinstance(connection, dict):
+            raise FnSyncError(tr("A NAS connection record is invalid", "NAS 连接记录无效"))
+        connection_id = validate_identifier(str(connection.get("id") or ""), "NAS connection")
+        if connection_id in connection_ids:
+            raise FnSyncError(tr("The NAS configuration contains duplicate IDs", "NAS 配置包含重复 ID"))
+        connection_ids.add(connection_id)
+        validate_connection_name(str(connection.get("name") or ""))
+        for flag in ("allow_http", "insecure_skip_verify"):
+            if not isinstance(connection.get(flag, False), bool):
+                raise FnSyncError(tr("A NAS security setting is invalid", "NAS 安全设置无效"))
+        url = validate_url(str(connection.get("url") or ""), connection.get("allow_http", False))
+        username = validate_username(str(connection.get("username") or ""))
+        remote_name = validate_identifier(str(connection.get("remote_name") or ""), "rclone remote")
+        if remote_name in remote_names:
+            raise FnSyncError(tr("The NAS configuration reuses an rclone remote ID", "NAS 配置重复使用 rclone 远端 ID"))
+        remote_names.add(remote_name)
+        pair = (url, username)
+        if pair in connection_pairs:
+            raise FnSyncError(tr("The NAS configuration contains a duplicate account", "NAS 配置包含重复账号"))
+        connection_pairs.add(pair)
+        validate_identifier(str(connection.get("secret_id") or connection_id), "secret")
+        if connection.get("credential_backend") not in {"secret-service", "rclone-obscured"}:
+            raise FnSyncError(tr("A NAS credential backend is invalid", "NAS 凭据后端无效"))
+        if str(connection.get("secret_attribute") or "connection") not in {"connection", "task"}:
+            raise FnSyncError(tr("A NAS secret attribute is invalid", "NAS 密钥属性无效"))
+
+    task_ids: set[str] = set()
+    for task in tasks:
+        if not isinstance(task, dict):
+            raise FnSyncError(tr("A sync task record is invalid", "同步任务记录无效"))
+        task_id = validate_identifier(str(task.get("id") or ""), "task")
+        if task_id in task_ids:
+            raise FnSyncError(tr("The task configuration contains duplicate IDs", "任务配置包含重复 ID"))
+        task_ids.add(task_id)
+        validate_task_name(str(task.get("name") or ""))
+        connection_id = validate_identifier(str(task.get("connection_id") or ""), "NAS connection")
+        if connection_id not in connection_ids:
+            raise FnSyncError(tr("A sync task refers to a missing NAS connection", "同步任务引用了不存在的 NAS 连接"))
+        if task.get("mode") not in MODES:
+            raise FnSyncError(tr("A sync task mode is invalid", "同步任务模式无效"))
+        for flag in ("enabled", "initialized"):
+            if not isinstance(task.get(flag, False), bool):
+                raise FnSyncError(tr("A sync task state is invalid", "同步任务状态无效"))
+        local = validate_local_path(str(task.get("local_path") or ""))
+        if str(local) != str(task.get("local_path") or ""):
+            raise FnSyncError(tr("A saved local task path no longer resolves to its original location", "已保存的本地任务路径不再解析到原位置"))
+        validate_remote_path(str(task.get("remote_path") or ""))
+        interval = task.get("interval_seconds", 300)
+        if not isinstance(interval, int) or isinstance(interval, bool):
+            raise FnSyncError(tr("A task sync interval is invalid", "任务同步间隔无效"))
+        validate_interval(interval)
+        bwlimit = task.get("bwlimit")
+        if bwlimit is not None and not isinstance(bwlimit, str):
+            raise FnSyncError(tr("A task bandwidth limit is invalid", "任务带宽限制无效"))
+        validate_bwlimit(bwlimit)
+        filters = task.get("filters", [])
+        if not isinstance(filters, list) or len(filters) > MAX_FILTERS:
+            raise FnSyncError(tr("A task contains too many filter rules", "任务包含过多过滤规则"))
+        for rule in filters:
+            if not isinstance(rule, str) or len(rule) > MAX_FILTER_LENGTH or "\n" in rule or "\r" in rule or "\x00" in rule:
+                raise FnSyncError(tr("A task filter rule is invalid or too long", "任务过滤规则无效或过长"))
+
+    for index, task in enumerate(tasks):
+        local = Path(task["local_path"])
+        connection = next(item for item in connections if item["id"] == task["connection_id"])
+        remote = str(task["remote_path"]).strip("/")
+        for other in tasks[index + 1 :]:
+            if paths_overlap(local, Path(other["local_path"])):
+                raise FnSyncError(tr("Saved sync tasks contain overlapping local folders", "已保存的同步任务包含重叠本地目录"))
+            other_connection = next(
+                item for item in connections if item["id"] == other["connection_id"]
+            )
+            if connection["url"] != other_connection["url"]:
+                continue
+            other_remote = str(other["remote_path"]).strip("/")
+            if remote == other_remote or remote.startswith(other_remote + "/") or other_remote.startswith(remote + "/"):
+                raise FnSyncError(tr("Saved sync tasks contain overlapping NAS folders", "已保存的同步任务包含重叠 NAS 目录"))
 
 
 def password_from_args(args: argparse.Namespace, *, required: bool) -> str | None:
@@ -1500,13 +1998,13 @@ def password_from_args(args: argparse.Namespace, *, required: bool) -> str | Non
         password = sys.stdin.readline().rstrip("\r\n")
         if not password:
             raise FnSyncError(tr("The password cannot be empty", "密码不能为空"))
-        return password
+        return validate_password(password)
     if not required:
         return None
     password = getpass.getpass(tr("WebDAV password: ", "WebDAV 密码: "))
     if not password:
         raise FnSyncError(tr("The password cannot be empty", "密码不能为空"))
-    return password
+    return validate_password(password)
 
 
 def create_connection(
@@ -1519,6 +2017,8 @@ def create_connection(
     allow_http: bool,
     insecure_skip_verify: bool,
 ) -> dict[str, Any]:
+    if len(store.get("connections", [])) >= MAX_CONNECTIONS:
+        raise FnSyncError(tr("The maximum number of NAS connections has been reached", "已达到 NAS 连接数量上限"))
     name = validate_connection_name(name)
     url = validate_url(url, allow_http)
     username = validate_username(username)
@@ -1671,6 +2171,13 @@ def cmd_connection_update(args: argparse.Namespace) -> int:
             raise FnSyncError(tr(f"The same NAS and user are already saved as {existing['name']}", f"相同的 NAS 和用户已保存为连接 {existing['name']}"))
 
     password = password_from_args(args, required=False)
+    verify_connection_update(
+        connection,
+        url=url,
+        username=username,
+        password=password,
+        insecure_skip_verify=insecure,
+    )
     if password is not None:
         previous_backend = connection["credential_backend"]
         backend = store_remote(
@@ -1746,14 +2253,18 @@ def cmd_task_add(args: argparse.Namespace) -> int:
     remote_path = validate_remote_path(args.remote_path)
     interval = validate_interval(args.interval)
     bwlimit = validate_bwlimit(args.bwlimit)
-    name = args.name.strip()
-    if not name:
-        raise FnSyncError(tr("The task name cannot be empty", "任务名称不能为空"))
-    if any("\n" in rule or "\r" in rule for rule in (args.filter or [])):
-        raise FnSyncError(tr("Each custom filter rule must be a single line", "每个自定义过滤规则必须是单行"))
+    name = validate_task_name(args.name)
+    filters = list(args.filter or [])
+    if len(filters) > MAX_FILTERS or any(
+        len(rule) > MAX_FILTER_LENGTH or "\n" in rule or "\r" in rule or "\x00" in rule
+        for rule in filters
+    ):
+        raise FnSyncError(tr("Custom filter rules are invalid, too long, or too numerous", "自定义过滤规则无效、过长或数量过多"))
     if args.mode not in MODES:
         raise FnSyncError(tr("Unknown sync mode", "未知同步模式"))
     store = load_store()
+    if len(store["tasks"]) >= MAX_TASKS:
+        raise FnSyncError(tr("The maximum number of sync tasks has been reached", "已达到同步任务数量上限"))
     created_connection: dict[str, Any] | None = None
     if args.connection:
         connection = find_connection(store, args.connection)
@@ -1785,7 +2296,7 @@ def cmd_task_add(args: argparse.Namespace) -> int:
         "remote_path": remote_path,
         "interval_seconds": interval,
         "bwlimit": bwlimit,
-        "filters": list(args.filter or []),
+        "filters": filters,
         "initialized": args.mode != "two-way",
         "created_at": now_iso(),
         "updated_at": now_iso(),
@@ -1929,6 +2440,23 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plugin_status(args: argparse.Namespace) -> int:
+    """Emit the plugin's bounded status payload without a host-side JSON tool."""
+    store = load_store()
+    status = load_status()
+    payload = {
+        "installed": True,
+        "ready": True,
+        "distribution": args.distribution,
+        "missing_dependencies": "",
+        "tasks": [merged_task_status(store, task, status) for task in store["tasks"]],
+        "connections": [public_connection(item) for item in store["connections"]],
+        "error": "",
+    }
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    return 0
+
+
 def cmd_sync_now(args: argparse.Namespace) -> int:
     store = load_store()
     results: list[dict[str, Any]] = []
@@ -1968,8 +2496,10 @@ def cmd_logs(args: argparse.Namespace) -> int:
     if not path.exists():
         print(tr("No logs yet", "还没有日志"))
         return 0
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    print("\n".join(lines[-args.lines :]))
+    requested = max(1, min(int(args.lines), 1000))
+    data = read_limited_tail(path, MAX_CAPTURE_BYTES)
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    print("\n".join(lines[-requested:]))
     return 0
 
 
@@ -1994,10 +2524,17 @@ def daemon_loop(once: bool = False) -> int:
             try:
                 result = run_task(hydrate_task(store, task))
                 if result.returncode and shutil.which("notify-send"):
-                    subprocess.run(
-                        ["notify-send", tr("FN sync failed", "飞牛同步失败"), f"{task['name']}: {failure_summary(result.output)}"],
-                        check=False,
-                    )
+                    with contextlib.suppress(FnSyncError):
+                        run_bounded_process(
+                            [
+                                "notify-send",
+                                tr("FN sync needs attention", "飞牛同步需要处理"),
+                                tr("A sync task failed. Open FN sync for details.", "同步任务失败。请打开飞牛同步查看详情。"),
+                            ],
+                            timeout=10,
+                            stdout_limit=65536,
+                            stderr_limit=65536,
+                        )
             except TaskBusyError:
                 # A manual run owns the task. Let it publish the final status.
                 pass
@@ -2166,6 +2703,10 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help=tr("show task status", "显示任务状态"))
     status.add_argument("--json", action="store_true")
     status.set_defaults(func=cmd_status)
+
+    plugin_status = sub.add_parser("plugin-status", help=argparse.SUPPRESS)
+    plugin_status.add_argument("--distribution", choices=("plugin", "system"), default="plugin")
+    plugin_status.set_defaults(func=cmd_plugin_status)
 
     sync_now = sub.add_parser("sync-now", help=tr("run all enabled tasks now", "立即运行所有已启用的任务"))
     sync_now.add_argument("--json", action="store_true")

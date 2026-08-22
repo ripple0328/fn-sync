@@ -55,8 +55,12 @@ class PublishingContractTests(unittest.TestCase):
             "no administrator access is needed",
             "omarchy plugin update community.fnos-sync --yes",
             "## Removal",
+            "## Requirements",
+            "fnOS NAS with WebDAV enabled",
+            "non-fnOS WebDAV server may work",
+            "Internet access is needed once only",
             "omarchy plugin remove community.fnos-sync --yes",
-            "systemctl --user disable --now fnsync.service",
+            "systemctl --user disable --now community.fnos-sync.service",
             "does not delete either synchronized folder",
             "task configuration and logs remain",
         ):
@@ -99,7 +103,7 @@ class PublishingContractTests(unittest.TestCase):
 
         build_job = workflow.split("  build:\n", 1)[1].split("  github-release:\n", 1)[0]
         install_position = build_job.index("Install release dependencies")
-        checkout_position = build_job.index("actions/checkout@v7")
+        checkout_position = build_job.index("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
         self.assertLess(install_position, checkout_position)
 
     def test_manual_aur_recovery_uses_the_verified_release_source(self):
@@ -165,18 +169,31 @@ class PublishingContractTests(unittest.TestCase):
             "controller/requirements-build.txt",
             "ubuntu-24.04-arm",
             "scripts/build-plugin-runtime.sh",
-            "actions/attest@v4",
+            "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
             "artifact-metadata: write",
             "BUILD-PROVENANCE.json",
             "runtime/SHA256SUMS",
             "FNSYNC_PLUGIN_RUNTIME_DIR",
-            "actions/download-artifact@v8",
+            "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
             "git subtree split --prefix=omarchy-plugin",
             "ripple0328/omarchy-fn-sync.git",
             "git fetch plugin main",
             'git push --force-with-lease=refs/heads/main:"$plugin_main"',
         ):
             self.assertIn(required, workflow)
+
+    def test_workflow_dependencies_are_pinned_to_immutable_digests(self):
+        workflow_paths = list((ROOT / ".github" / "workflows").glob("*.yml"))
+        workflow_paths += list((ROOT / "omarchy-plugin" / ".github" / "workflows").glob("*.yml"))
+        for path in workflow_paths:
+            content = path.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                if "uses: actions/" in line:
+                    reference = line.split("@", 1)[1].split()[0]
+                    self.assertRegex(reference, r"^[0-9a-f]{40}$", path)
+            self.assertNotIn("basecamp/omarchy/quattro/", content)
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("rhysd/actionlint:1.7.12@sha256:", ci)
 
     def test_plugin_tests_pass_without_the_parent_source_tree(self):
         with tempfile.TemporaryDirectory(prefix="fn-sync-standalone-plugin-") as temp:

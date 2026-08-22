@@ -2,7 +2,6 @@ import importlib.util
 import io
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import types
@@ -114,16 +113,13 @@ class ControllerEdgeTests(unittest.TestCase):
             fnsync.load_store()
 
     def test_rclone_version_and_minimum_version_fail_closed(self):
-        invalid = subprocess.CompletedProcess(["rclone", "version"], 0, "unknown", "")
-        with mock.patch.object(fnsync.subprocess, "run", return_value=invalid):
+        invalid = fnsync.BoundedProcessResult(0, "unknown", "")
+        with mock.patch.object(fnsync, "run_bounded_process", return_value=invalid):
             with self.assertRaisesRegex(fnsync.FnSyncError, "determine the rclone version"):
                 fnsync.rclone_version("rclone")
 
-        with mock.patch.object(
-            fnsync.subprocess,
-            "run",
-            side_effect=subprocess.TimeoutExpired(["rclone", "version"], 15),
-        ):
+        timed_out = fnsync.BoundedProcessResult(124, "", "", timed_out=True)
+        with mock.patch.object(fnsync, "run_bounded_process", return_value=timed_out):
             with self.assertRaisesRegex(fnsync.FnSyncError, "Could not run rclone"):
                 fnsync.rclone_version("rclone")
 
@@ -141,15 +137,15 @@ class ControllerEdgeTests(unittest.TestCase):
         with mock.patch.object(fnsync.shutil, "which", return_value=None):
             self.assertFalse(fnsync.secret_tool_store("nas123", "NAS", "secret"))
 
-        success = subprocess.CompletedProcess(["secret-tool"], 0, "", "")
+        success = fnsync.BoundedProcessResult(0, "", "")
         with mock.patch.object(fnsync.shutil, "which", return_value="secret-tool"), mock.patch.object(
-            fnsync.subprocess, "run", return_value=success
+            fnsync, "run_bounded_process", return_value=success
         ) as run:
             self.assertTrue(fnsync.secret_tool_store("nas123", "NAS", "secret"))
-        self.assertEqual(run.call_args.kwargs["input"], "secret")
+        self.assertEqual(run.call_args.kwargs["input_text"], "secret")
 
         with mock.patch.object(fnsync.shutil, "which", return_value="secret-tool"), mock.patch.object(
-            fnsync.subprocess, "run", side_effect=OSError("keyring unavailable")
+            fnsync, "run_bounded_process", side_effect=fnsync.FnSyncError("keyring unavailable")
         ):
             self.assertFalse(fnsync.secret_tool_store("nas123", "NAS", "secret"))
 
@@ -203,7 +199,9 @@ class ControllerEdgeTests(unittest.TestCase):
             allow_http=None,
             insecure_skip_verify=True,
         )
-        with mock.patch.object(fnsync, "password_from_args", return_value=None), redirect_stdout(
+        with mock.patch.object(fnsync, "password_from_args", return_value=None), mock.patch.object(
+            fnsync, "verify_connection_update"
+        ), redirect_stdout(
             io.StringIO()
         ):
             self.assertEqual(fnsync.cmd_connection_update(args), 0)
@@ -229,6 +227,8 @@ class ControllerEdgeTests(unittest.TestCase):
             insecure_skip_verify=None,
         )
         with mock.patch.object(fnsync, "password_from_args", return_value="new-password"), mock.patch.object(
+            fnsync, "verify_connection_update"
+        ), mock.patch.object(
             fnsync, "store_remote", return_value="rclone-obscured"
         ), mock.patch.object(fnsync, "secret_tool_clear") as clear, redirect_stdout(io.StringIO()):
             self.assertEqual(fnsync.cmd_connection_update(args), 0)
@@ -236,6 +236,32 @@ class ControllerEdgeTests(unittest.TestCase):
         saved = fnsync.load_store()
         self.assertEqual(saved["connections"][0]["credential_backend"], "rclone-obscured")
         self.assertNotIn("first_sync_check", saved["tasks"][0])
+
+    def test_connection_update_verifies_before_mutating_saved_state(self):
+        connection = self.connection()
+        fnsync.save_store(self.store([], [connection]))
+        self.write_remote(connection)
+        before_store = fnsync.runtime_paths()["tasks"].read_bytes()
+        before_remote = fnsync.runtime_paths()["rclone"].read_bytes()
+        args = types.SimpleNamespace(
+            connection_id="nas123",
+            name="Changed",
+            url="https://unreachable.example:5006/",
+            username="bob",
+            password_stdin=True,
+            allow_http=None,
+            insecure_skip_verify=None,
+        )
+        with mock.patch.object(fnsync, "password_from_args", return_value="new-password"), mock.patch.object(
+            fnsync,
+            "verify_connection_update",
+            side_effect=fnsync.FnSyncError("connection refused"),
+        ), mock.patch.object(fnsync, "store_remote") as store_remote:
+            with self.assertRaisesRegex(fnsync.FnSyncError, "connection refused"):
+                fnsync.cmd_connection_update(args)
+        store_remote.assert_not_called()
+        self.assertEqual(fnsync.runtime_paths()["tasks"].read_bytes(), before_store)
+        self.assertEqual(fnsync.runtime_paths()["rclone"].read_bytes(), before_remote)
 
     def test_task_add_with_saved_connection_writes_filter_and_safe_defaults(self):
         fnsync.save_store(self.store())

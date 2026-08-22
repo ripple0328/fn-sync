@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Install publishing dependencies
         run: pacman -Syu --noconfirm curl git openssh
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Download and verify the release source
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
