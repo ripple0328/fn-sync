@@ -49,6 +49,13 @@ class InstallerTests(unittest.TestCase):
             raise SystemExit(0)
             """,
         )
+        self._write_fake(
+            "rclone",
+            """
+            #!/bin/sh
+            printf '%s\n' 'rclone v1.75.0'
+            """,
+        )
         self.env = os.environ.copy()
         self.env.update(
             {
