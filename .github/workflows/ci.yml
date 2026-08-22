@@ -26,7 +26,7 @@ jobs:
       - name: Install lint and coverage tools
         run: python -m pip install --disable-pip-version-check coverage ruff
       - name: Lint Python
-        run: ruff check src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
+        run: ruff check src tests omarchy-plugin/controller omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
       - name: Run controller and package tests with coverage
         env:
           FNSYNC_COVERAGE_SUBPROCESS: "1"
@@ -70,6 +70,7 @@ jobs:
             scripts/release-source.sh \
             scripts/sync-plugin-runtime.sh \
             scripts/verify-package.sh \
+            omarchy-plugin/controller/build-runtime.sh \
             omarchy-plugin/scripts/fn-syncctl
 
   workflows:
@@ -108,7 +109,7 @@ jobs:
           /tmp/omarchy-plugin-validate omarchy-plugin
       - name: Parse QML
         run: |
-          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml omarchy-plugin/PlainText.qml omarchy-plugin/PlainTextAction.qml omarchy-plugin/PlainTextDropdown.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
 
@@ -123,7 +124,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes jq
-          python -m pip install --disable-pip-version-check pyinstaller==6.22.0
+          python -m pip install --disable-pip-version-check -r omarchy-plugin/controller/requirements-build.txt
       - name: Build the standalone AMD64 controller
         run: ./scripts/build-plugin-runtime.sh amd64 "$RUNNER_TEMP/plugin-runtime"
       - name: Test the plugin without a Python runtime

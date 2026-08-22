@@ -1,5 +1,5 @@
 pkgname=fn-sync
-pkgver=0.10.1
+pkgver=0.10.2
 pkgrel=1
 pkgdesc="Safe fnOS WebDAV sync client with Omarchy integration"
 arch=('any')
@@ -33,6 +33,9 @@ package() {
   install -Dm644 omarchy-plugin/Panel.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/Panel.qml"
   install -Dm644 omarchy-plugin/PanelPageHeader.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/PanelPageHeader.qml"
   install -Dm644 omarchy-plugin/FnSyncIcon.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/FnSyncIcon.qml"
+  install -Dm644 omarchy-plugin/PlainText.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/PlainText.qml"
+  install -Dm644 omarchy-plugin/PlainTextAction.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/PlainTextAction.qml"
+  install -Dm644 omarchy-plugin/PlainTextDropdown.qml "$pkgdir/usr/share/fn-sync/omarchy-plugin/PlainTextDropdown.qml"
   install -Dm644 omarchy-plugin/assets/fn-sync-symbolic.png "$pkgdir/usr/share/fn-sync/omarchy-plugin/assets/fn-sync-symbolic.png"
   install -Dm755 omarchy-plugin/scripts/fn-syncctl "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn-syncctl"
   install -Dm755 omarchy-plugin/scripts/fn_sync_discover.py "$pkgdir/usr/share/fn-sync/omarchy-plugin/scripts/fn_sync_discover.py"

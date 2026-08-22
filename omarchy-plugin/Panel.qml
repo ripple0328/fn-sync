@@ -1167,7 +1167,7 @@ Panel {
                             anchors.rightMargin: Style.spacing.rowPaddingX
                             spacing: Style.spacing.md
 
-                            Text {
+                            PlainText {
                                 width: parent.width
                                 text: root.installed ? root.l10n("Finish FN Sync setup", "完成飞牛设置") : root.l10n("FN Sync needs to be reinstalled", "需要重新安装飞牛")
                                 color: root.foreground
@@ -1176,7 +1176,7 @@ Panel {
                                 font.bold: true
                             }
 
-                            Text {
+                            PlainText {
                                 width: parent.width
                                 text: root.installed
                                     ? root.l10n("The client and interface are included. Finish the one-time preparation of its private, verified transfer runtime.", "客户端和界面均已内置。完成一次性设置，即可准备插件私有且经过校验的传输运行组件。")
@@ -1187,7 +1187,7 @@ Panel {
                                 wrapMode: Text.WordWrap
                             }
 
-                            Text {
+                            PlainText {
                                 visible: root.statusError !== ""
                                 width: parent.width
                                 text: root.statusError
@@ -1258,7 +1258,7 @@ Panel {
                             fontFamily: root.fontFamily
                         }
 
-                        Text {
+                        PlainText {
                             visible: root.tasks.length === 0
                             width: parent.width
                             text: root.connections.length === 0 ? root.l10n("Open Settings and connect a NAS once, then create as many tasks as you need.", "请在设置中连接一次 NAS，然后按需创建多个任务。") : root.l10n("No tasks yet. Create the first task with a saved NAS connection.", "尚无任务。请使用已保存的 NAS 连接创建第一个任务。")
@@ -1294,7 +1294,7 @@ Panel {
                                         Column {
                                             width: parent.width - taskManage.implicitWidth - parent.spacing
                                             spacing: Style.spacing.xs
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: String(modelData.name || modelData.id || root.l10n("Sync task", "同步任务"))
                                                 color: root.foreground
@@ -1303,7 +1303,7 @@ Panel {
                                                 font.bold: true
                                                 elide: Text.ElideRight
                                             }
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: String(modelData.connection_name || "fnOS NAS") + " · " + root.modeText(modelData.mode)
                                                 color: root.dimForeground
@@ -1339,7 +1339,7 @@ Panel {
                                             anchors.rightMargin: Style.spacing.rowPaddingX
                                             spacing: Style.spacing.xs
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: root.stateText(modelData)
                                                 color: root.stateColor(modelData)
@@ -1348,7 +1348,7 @@ Panel {
                                                 font.bold: true
                                             }
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: root.taskListStatusDetail(modelData)
                                                 color: root.needsAccessRepair(modelData) || modelData.status && modelData.status.state === "error" ? root.urgent : root.foreground
@@ -1367,7 +1367,7 @@ Panel {
                                             width: (parent.width - parent.spacing) / 2
                                             spacing: Style.spacing.xs
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: root.l10n("THIS COMPUTER", "此电脑")
                                                 color: root.dimForeground
@@ -1376,7 +1376,7 @@ Panel {
                                                 font.bold: true
                                             }
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: String(modelData.local_path || "")
                                                 color: root.foreground
@@ -1390,7 +1390,7 @@ Panel {
                                             width: (parent.width - parent.spacing) / 2
                                             spacing: Style.spacing.xs
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: root.l10n("NAS FOLDER", "NAS 文件夹")
                                                 color: root.dimForeground
@@ -1399,7 +1399,7 @@ Panel {
                                                 font.bold: true
                                             }
 
-                                            Text {
+                                            PlainText {
                                                 width: parent.width
                                                 text: "NAS:/" + String(modelData.remote_path || "")
                                                 color: root.foreground
@@ -1455,7 +1455,7 @@ Panel {
                             fontFamily: root.fontFamily
                         }
 
-                        Text {
+                        PlainText {
                             visible: root.connections.length === 0
                             width: parent.width
                             text: root.l10n("No NAS connections yet. Connect using the official fnOS WebDAV service.", "尚无 NAS 连接。请使用 fnOS 官方 WebDAV 服务连接。")
@@ -1490,7 +1490,7 @@ Panel {
                                         width: parent.width
                                         spacing: Style.spacing.sm
 
-                                        Text {
+                                        PlainText {
                                             width: parent.width - nasUsageBadge.width - parent.spacing
                                             anchors.verticalCenter: parent.verticalCenter
                                             text: String(modelData.name || "fnOS NAS")
@@ -1512,7 +1512,7 @@ Panel {
                                             borderSpec: Border.controlSpec("normal", root.foreground, root.accent, root.urgent)
                                             radius: height / 2
 
-                                            Text {
+                                            PlainText {
                                                 id: nasUsageBadgeText
                                                 anchors.centerIn: parent
                                                 text: root.connectionUseCount(modelData.id) === 1
@@ -1526,7 +1526,7 @@ Panel {
                                         }
                                     }
 
-                                    Text {
+                                    PlainText {
                                         width: parent.width
                                         text: String(modelData.username || "") + " · " + String(modelData.url || "")
                                         color: root.dimForeground
@@ -1535,7 +1535,7 @@ Panel {
                                         elide: Text.ElideMiddle
                                     }
 
-                                    Text {
+                                    PlainText {
                                         width: parent.width
                                         text: root.l10n("CONNECTION ACTIONS", "连接操作")
                                         color: root.dimForeground
@@ -1615,7 +1615,7 @@ Panel {
                                     anchors.verticalCenter: parent.verticalCenter
                                     spacing: Style.spacing.xs
 
-                                    Text {
+                                    PlainText {
                                         width: parent.width
                                         text: root.l10n("Saved NAS authorizations", "已保存的 NAS 授权")
                                         color: root.foreground
@@ -1624,7 +1624,7 @@ Panel {
                                         font.bold: true
                                     }
 
-                                    Text {
+                                    PlainText {
                                         width: parent.width
                                         text: root.connections.length > 0
                                             ? root.l10n(root.connections.length + " connection(s) available to every sync task", root.connections.length + " 个连接可供所有同步任务使用")
@@ -1670,14 +1670,14 @@ Panel {
                                 anchors.leftMargin: Style.spacing.rowPaddingX
                                 anchors.rightMargin: Style.spacing.rowPaddingX
                                 spacing: Style.spacing.sm
-                                Text {
+                                PlainText {
                                     text: root.l10n("Language", "语言")
                                     color: root.foreground
                                     font.family: root.fontFamily
                                     font.pixelSize: Style.font.subtitle
                                     font.bold: true
                                 }
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.l10n("System default follows the desktop locale. You can override it here.", "“跟随系统”会使用桌面区域设置，也可以在此手动覆盖。")
                                     color: root.dimForeground
@@ -1749,7 +1749,7 @@ Panel {
                                     width: parent.width
                                     spacing: Style.spacing.sm
 
-                                    Text {
+                                    PlainText {
                                         width: parent.width - taskModeBadge.width - parent.spacing
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: root.selectedTask ? root.stateText(root.selectedTask) : ""
@@ -1771,7 +1771,7 @@ Panel {
                                         borderSpec: Border.controlSpec("normal", root.foreground, root.accent, root.urgent)
                                         radius: height / 2
 
-                                        Text {
+                                        PlainText {
                                             id: taskModeBadgeText
                                             anchors.centerIn: parent
                                             text: root.selectedTask ? root.modeText(root.selectedTask.mode).toUpperCase() : ""
@@ -1783,7 +1783,7 @@ Panel {
                                     }
                                 }
 
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.stateSummary(root.selectedTask)
                                     color: root.foreground
@@ -1792,7 +1792,7 @@ Panel {
                                     wrapMode: Text.WordWrap
                                 }
 
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.statusTimeText(root.selectedTask) + " · " + root.automationText(root.selectedTask)
                                     color: root.dimForeground
@@ -1849,7 +1849,7 @@ Panel {
                                         width: taskInformationColumn.width
                                         spacing: Style.spacing.xs
 
-                                        Text {
+                                        PlainText {
                                             width: parent.width
                                             text: modelData.label
                                             color: root.dimForeground
@@ -1858,7 +1858,7 @@ Panel {
                                             font.bold: true
                                         }
 
-                                        Text {
+                                        PlainText {
                                             width: parent.width
                                             text: modelData.value
                                             color: root.foreground
@@ -1893,7 +1893,7 @@ Panel {
                                 anchors.leftMargin: Style.spacing.rowPaddingX
                                 anchors.rightMargin: Style.spacing.rowPaddingX
                                 spacing: Style.spacing.sm
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.previewRunning && root.actionTaskId === String(root.selectedTask.id)
                                         ? root.l10n("Checking both folders", "正在检查两端文件夹")
@@ -1906,7 +1906,7 @@ Panel {
                                     font.bold: true
                                     wrapMode: Text.WordWrap
                                 }
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.l10n("This choice matters only when the same file exists on both sides with different contents.", "此选择只在同一文件同时存在于两端且内容不同时生效。")
                                     color: root.dimForeground
@@ -1942,7 +1942,7 @@ Panel {
                                         onClicked: root.firstSyncWinner = "nas"
                                     }
                                 }
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.firstSyncRuleText()
                                     color: root.dimForeground
@@ -1965,7 +1965,7 @@ Panel {
                                         anchors.leftMargin: Style.spacing.rowPaddingX
                                         anchors.rightMargin: Style.spacing.rowPaddingX
                                         spacing: Style.spacing.xs
-                                        Text {
+                                        PlainText {
                                             width: parent.width
                                             text: root.previewProgressText()
                                             color: root.foreground
@@ -1974,7 +1974,7 @@ Panel {
                                             font.bold: true
                                             wrapMode: Text.WordWrap
                                         }
-                                        Text {
+                                        PlainText {
                                             width: parent.width
                                             text: root.l10n("This read-only check scans both folders and can take several minutes. No files are being changed.", "此只读检查会扫描两端文件夹，可能需要几分钟。不会修改任何文件。")
                                             color: root.dimForeground
@@ -1982,7 +1982,7 @@ Panel {
                                             font.pixelSize: Style.font.caption
                                             wrapMode: Text.WordWrap
                                         }
-                                        Text {
+                                        PlainText {
                                             visible: root.actionProgressLine !== ""
                                             width: parent.width
                                             text: root.actionProgressLine
@@ -2037,7 +2037,7 @@ Panel {
                                     fontFamily: root.fontFamily
                                     onClicked: root.runAction(["task", "preview", String(root.selectedTask.id), "--winner", root.firstSyncWinner], root.l10n("Check first sync", "检查首次同步"), false, false)
                                 }
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.firstSyncCheckReady(root.selectedTask)
                                         ? root.l10n("Starting the first sync will also turn on automatic background sync.", "开始首次同步后，也会自动开启后台同步。")
@@ -2097,7 +2097,7 @@ Panel {
                                 anchors.leftMargin: Style.spacing.rowPaddingX
                                 anchors.rightMargin: Style.spacing.rowPaddingX
                                 spacing: Style.spacing.md
-                                Text {
+                                PlainText {
                                     width: parent.width
                                     text: root.l10n("Confirm the local and NAS folders above are correct. Repair recreates only FN sync's marker, verifies it, then resumes automatic sync.", "请确认上方本地和 NAS 文件夹无误。修复操作只会重新创建飞牛同步标记，验证后恢复自动同步。")
                                     color: root.dimForeground
@@ -2224,7 +2224,7 @@ Panel {
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("tasks")
                         }
-                        Text {
+                        PlainText {
                             width: parent.width
                             text: root.l10n("The NAS authorization is reused. This task only defines the sync rule and two folders.", "此任务复用已有 NAS 授权，只定义同步规则和两端文件夹。")
                             color: root.dimForeground
@@ -2232,7 +2232,7 @@ Panel {
                             font.pixelSize: Style.font.caption
                             wrapMode: Text.WordWrap
                         }
-                        Dropdown {
+                        PlainTextDropdown {
                             id: taskConnectionDropdown
                             width: parent.width
                             label: root.l10n("NAS CONNECTION", "NAS 连接")
@@ -2249,7 +2249,7 @@ Panel {
                         Column {
                             width: parent.width
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 text: root.l10n("TASK NAME", "任务名称")
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -2295,7 +2295,7 @@ Panel {
                         Column {
                             width: parent.width
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 text: root.l10n("NAS FOLDER", "NAS 文件夹")
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -2329,7 +2329,7 @@ Panel {
                         Column {
                             width: parent.width
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 text: root.l10n("LOCAL FOLDER", "本地文件夹")
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -2403,7 +2403,7 @@ Panel {
                             fontFamily: root.fontFamily
                             onBackRequested: root.page = "add-task"
                         }
-                        Text {
+                        PlainText {
                             width: parent.width
                             text: root.browsePath === "" ? "NAS:/" : "NAS:/" + root.browsePath
                             color: root.accent
@@ -2412,7 +2412,7 @@ Panel {
                             font.bold: true
                             elide: Text.ElideMiddle
                         }
-                        Text {
+                        PlainText {
                             width: parent.width
                             text: root.l10n("Open folders to navigate. The NAS root itself cannot be selected.", "打开文件夹进行浏览。NAS 根目录不能直接选择。")
                             color: root.dimForeground
@@ -2434,7 +2434,7 @@ Panel {
                         }
                         Repeater {
                             model: root.browseFolders
-                            Button {
+                            PlainTextAction {
                                 required property var modelData
                                 width: content.width
                                 text: String(modelData.name || "") + "  ›"
@@ -2493,7 +2493,7 @@ Panel {
                             fontFamily: root.fontFamily
                             onBackRequested: root.showPrimary("nas")
                         }
-                        Text {
+                        PlainText {
                             width: parent.width
                             text: root.editingConnectionId === "" ? root.l10n("Nothing is saved until Test login & folders can sign in and read the NAS folder list. Tasks reuse this authorization later.", "只有“测试登录与文件夹”成功登录并读取 NAS 文件夹列表后才会保存；之后任务会复用此授权。") : root.l10n("Update the connection for every task at once. Leave password blank to keep the current authorization.", "一次更新所有任务使用的连接；密码留空可保持当前授权。")
                             color: root.dimForeground
@@ -2520,7 +2520,7 @@ Panel {
                             spacing: Style.spacing.sm
                             Repeater {
                                 model: root.discoveredDevices
-                                Button {
+                                PlainTextAction {
                                     required property var modelData
                                     width: parent.width
                                     text: root.discoveredDeviceLabel(modelData)
@@ -2542,7 +2542,7 @@ Panel {
                         Column {
                             width: parent.width
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 text: root.l10n("CONNECTION NAME", "连接名称")
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -2563,7 +2563,7 @@ Panel {
                         Column {
                             width: parent.width
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 text: "WEBDAV URL"
                                 color: root.dimForeground
                                 font.family: root.fontFamily
@@ -2587,7 +2587,7 @@ Panel {
                             Column {
                                 width: (parent.width - parent.spacing) / 2
                                 spacing: Style.spacing.sm
-                                Text {
+                                PlainText {
                                     text: root.l10n("USERNAME", "用户名")
                                     color: root.dimForeground
                                     font.family: root.fontFamily
@@ -2608,7 +2608,7 @@ Panel {
                             Column {
                                 width: (parent.width - parent.spacing) / 2
                                 spacing: Style.spacing.sm
-                                Text {
+                                PlainText {
                                     text: root.editingConnectionId === "" ? root.l10n("PASSWORD", "密码") : root.l10n("NEW PASSWORD", "新密码")
                                     color: root.dimForeground
                                     font.family: root.fontFamily
@@ -2713,7 +2713,7 @@ Panel {
                             anchors.leftMargin: Style.spacing.rowPaddingX
                             anchors.rightMargin: Style.spacing.rowPaddingX
                             spacing: Style.spacing.sm
-                            Text {
+                            PlainText {
                                 visible: root.actionStatus !== ""
                                 width: parent.width
                                 text: root.actionStatus
@@ -2722,7 +2722,7 @@ Panel {
                                 font.pixelSize: Style.font.bodySmall
                                 wrapMode: Text.WordWrap
                             }
-                            Text {
+                            PlainText {
                                 visible: root.actionError !== "" || root.statusError !== ""
                                 width: parent.width
                                 text: root.actionError !== "" ? root.actionError : root.statusError
@@ -2731,7 +2731,7 @@ Panel {
                                 font.pixelSize: Style.font.bodySmall
                                 wrapMode: Text.WordWrap
                             }
-                            Text {
+                            PlainText {
                                 visible: root.actionOutput !== ""
                                 width: parent.width
                                 text: root.actionOutput

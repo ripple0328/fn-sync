@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "community.fnos-sync",
   "name": "FN sync",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "author": "Qingbo Zhang",
   "license": "MIT",
   "description": "Theme-native FN sync task management for the Omarchy bar.",

@@ -14,6 +14,9 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   build-runtime:
@@ -31,9 +34,13 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install the pinned runtime builder
-        run: python -m pip install --disable-pip-version-check pyinstaller==6.22.0
+        run: python -m pip install --disable-pip-version-check -r omarchy-plugin/controller/requirements-build.txt
       - name: Build standalone plugin controller
         run: ./scripts/build-plugin-runtime.sh "${{ matrix.architecture }}" "$RUNNER_TEMP/plugin-runtime"
+      - name: Attest standalone plugin controller
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/plugin-runtime/fn-sync-runtime-${{ matrix.architecture }}
       - name: Upload standalone plugin controller
         uses: actions/upload-artifact@v7
         with:
@@ -64,14 +71,59 @@ jobs:
           FNSYNC_PLUGIN_RUNTIME_DIR: ${{ runner.temp }}/plugin-runtime
         run: |
           ./scripts/sync-plugin-runtime.sh
+          (
+            cd omarchy-plugin
+            sha256sum \
+              runtime/bin/fn-sync-runtime-amd64 \
+              runtime/bin/fn-sync-runtime-arm64 \
+              > runtime/SHA256SUMS
+          )
+          controller_sha=$(sha256sum omarchy-plugin/controller/fnsync.py | cut -d' ' -f1)
+          entrypoint_sha=$(sha256sum omarchy-plugin/controller/entrypoint.py | cut -d' ' -f1)
+          discovery_sha=$(sha256sum omarchy-plugin/scripts/fn_sync_discover.py | cut -d' ' -f1)
+          build_script_sha=$(sha256sum omarchy-plugin/controller/build-runtime.sh | cut -d' ' -f1)
+          amd64_sha=$(sha256sum omarchy-plugin/runtime/bin/fn-sync-runtime-amd64 | cut -d' ' -f1)
+          arm64_sha=$(sha256sum omarchy-plugin/runtime/bin/fn-sync-runtime-arm64 | cut -d' ' -f1)
+          jq --null-input \
+            --arg source_repository "https://github.com/${GITHUB_REPOSITORY}" \
+            --arg source_commit "$GITHUB_SHA" \
+            --arg workflow_url "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg controller_sha "$controller_sha" \
+            --arg entrypoint_sha "$entrypoint_sha" \
+            --arg discovery_sha "$discovery_sha" \
+            --arg build_script_sha "$build_script_sha" \
+            --arg amd64_sha "$amd64_sha" \
+            --arg arm64_sha "$arm64_sha" \
+            '{
+              schema_version: 1,
+              source_repository: $source_repository,
+              source_commit: $source_commit,
+              workflow_url: $workflow_url,
+              builder: {
+                operating_system: "Ubuntu 24.04 native runners",
+                python: "3.13",
+                pyinstaller: "6.22.0"
+              },
+              sources: [
+                {path: "controller/fnsync.py", sha256: $controller_sha},
+                {path: "controller/entrypoint.py", sha256: $entrypoint_sha},
+                {path: "scripts/fn_sync_discover.py", sha256: $discovery_sha},
+                {path: "controller/build-runtime.sh", sha256: $build_script_sha}
+              ],
+              artifacts: [
+                {path: "runtime/bin/fn-sync-runtime-amd64", sha256: $amd64_sha},
+                {path: "runtime/bin/fn-sync-runtime-arm64", sha256: $arm64_sha}
+              ],
+              attestation_repository: "ripple0328/fn-sync"
+            }' > omarchy-plugin/BUILD-PROVENANCE.json
           curl --fail --silent --show-error --location \
             https://raw.githubusercontent.com/basecamp/omarchy/quattro/bin/omarchy-plugin-validate \
             --output /tmp/omarchy-plugin-validate
           chmod +x /tmp/omarchy-plugin-validate
           /tmp/omarchy-plugin-validate omarchy-plugin
           python3 -m unittest discover -s omarchy-plugin/tests -v
-          shellcheck omarchy-plugin/scripts/fn-syncctl
-          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
+          shellcheck omarchy-plugin/scripts/fn-syncctl omarchy-plugin/controller/build-runtime.sh
+          for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml omarchy-plugin/PlainText.qml omarchy-plugin/PlainTextAction.qml omarchy-plugin/PlainTextDropdown.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
       - name: Configure the plugin repository deploy key
@@ -86,8 +138,8 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add --force omarchy-plugin/runtime
-          git commit --message "Bundle FN Sync runtime for plugin release"
+          git add --force omarchy-plugin/runtime omarchy-plugin/BUILD-PROVENANCE.json
+          git commit --message "Publish auditable FN Sync plugin runtime"
           git subtree split --prefix=omarchy-plugin --branch=plugin-release
           git remote add plugin git@github.com:ripple0328/omarchy-fn-sync.git
           git fetch plugin main

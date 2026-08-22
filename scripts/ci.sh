@@ -6,12 +6,12 @@ cd "$project_dir"
 
 ./scripts/sync-plugin-runtime.sh
 
-python3 -m compileall -q src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
+python3 -m compileall -q src tests omarchy-plugin/controller omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s omarchy-plugin/tests -v
 
 if command -v ruff >/dev/null 2>&1; then
-  ruff check --no-cache src tests omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
+  ruff check --no-cache src tests omarchy-plugin/controller omarchy-plugin/scripts omarchy-plugin/tests scripts/fn-sync-plugin-runtime.py
 elif [ "${CI:-}" = "true" ]; then
   echo "ruff is required in CI" >&2
   exit 1
@@ -34,6 +34,7 @@ scripts/release-source.sh
 scripts/sync-plugin-runtime.sh
 scripts/verify-package.sh
 omarchy-plugin/scripts/fn-syncctl
+omarchy-plugin/controller/build-runtime.sh
 "
 if command -v shellcheck >/dev/null 2>&1; then
   # shellcheck disable=SC2086
@@ -48,7 +49,7 @@ if [ -z "$qmlformat_bin" ] && [ -x /usr/lib/qt6/bin/qmlformat ]; then
   qmlformat_bin=/usr/lib/qt6/bin/qmlformat
 fi
 if [ -n "$qmlformat_bin" ]; then
-  for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml; do
+  for qml in omarchy-plugin/BarWidget.qml omarchy-plugin/Panel.qml omarchy-plugin/PanelPageHeader.qml omarchy-plugin/FnSyncIcon.qml omarchy-plugin/PlainText.qml omarchy-plugin/PlainTextAction.qml omarchy-plugin/PlainTextDropdown.qml; do
     "$qmlformat_bin" "$qml" >/dev/null
   done
 elif [ "${CI:-}" = "true" ]; then

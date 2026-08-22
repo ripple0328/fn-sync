@@ -70,7 +70,9 @@ a reinstall; a system-installed rclone is never changed or removed.
 
 The plugin uses Omarchy's `Color`, `Style`, `BorderSurface`, `KeyboardPanel`,
 `Button`, `TextField`, `Dropdown`, and `Toggle` components so it follows the
-active theme automatically.
+active theme automatically. Controller-, NAS-, and user-derived strings are
+rendered through explicit `Text.PlainText` surfaces; they are never interpreted
+as HTML, Markdown, or remote image resources.
 
 ## Guided first sync
 
@@ -121,6 +123,26 @@ guards, and bounded same-subnet discovery on documented/default fnOS ports.
 FN ID relay, cross-subnet discovery, official token/2FA authorization, and
 on-demand placeholders depend on private official-client APIs and are not
 emulated.
+
+## Auditing the bundled controller
+
+The exact controller source and build entry point are published under
+[`controller/`](controller/). Each AMD64 and ARM64 executable is built from
+that directory on a native Ubuntu 24.04 GitHub Actions runner using Python 3.13
+and PyInstaller 6.22.0. [`BUILD-PROVENANCE.json`](BUILD-PROVENANCE.json) binds
+the published binary hashes to the main source commit and workflow run, while
+GitHub stores a signed SLSA build-provenance attestation for each executable.
+
+Verify the downloaded bytes and attestation with:
+
+```bash
+sha256sum -c runtime/SHA256SUMS
+gh attestation verify runtime/bin/fn-sync-runtime-amd64 --repo ripple0328/fn-sync
+```
+
+Use the ARM64 filename on AArch64 systems. See
+[`controller/README.md`](controller/README.md) for the local build command and
+the precise reproducibility boundary.
 
 ## Development
 
