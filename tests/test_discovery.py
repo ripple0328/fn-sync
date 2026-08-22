@@ -3,7 +3,10 @@ import importlib.util
 import io
 import ipaddress
 import json
+import os
 import sys
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,6 +25,39 @@ SPEC.loader.exec_module(discovery)
 
 
 class DiscoveryTests(unittest.TestCase):
+    def test_ip_json_reader_caps_and_validates_helper_output(self):
+        with tempfile.TemporaryDirectory(prefix="fn-sync-ip-helper-") as temp:
+            helper = Path(temp) / "ip"
+
+            def run_helper(body):
+                helper.write_text(
+                    textwrap.dedent(body).lstrip(),
+                    encoding="utf-8",
+                )
+                helper.chmod(0o755)
+                with mock.patch.dict(
+                    os.environ,
+                    {"PATH": f"{temp}:{os.environ.get('PATH', '')}"},
+                ):
+                    return discovery._run_ip_json(["route"])
+
+            self.assertEqual(
+                run_helper("#!/bin/sh\nprintf '%s\\n' '[{\"dst\":\"10.0.0.0/24\"}]'\n"),
+                [{"dst": "10.0.0.0/24"}],
+            )
+            self.assertEqual(run_helper("#!/bin/sh\nprintf '%s\\n' '{}'\n"), [])
+            self.assertEqual(run_helper("#!/bin/sh\nprintf '%s\\n' 'not-json'\n"), [])
+            self.assertEqual(
+                run_helper(
+                    """
+                    #!/usr/bin/env python3
+                    import sys
+                    sys.stdout.write("x" * 300000)
+                    """
+                ),
+                [],
+            )
+
     def test_large_private_route_is_bounded_to_source_subnet(self):
         routes = [{"dst": "10.0.0.0/8", "prefsrc": "10.23.45.67"}]
         with mock.patch.object(discovery, "_run_ip_json", return_value=routes):
@@ -29,6 +65,25 @@ class DiscoveryTests(unittest.TestCase):
                 discovery.local_private_networks(),
                 [ipaddress.ip_network("10.23.45.0/24")],
             )
+
+    def test_network_and_socket_filters_are_bounded(self):
+        routes = [
+            {"dst": "default"},
+            {"dst": "not-a-network"},
+            {"dst": "8.8.8.0/24"},
+            {"dst": "10.0.0.0/8", "prefsrc": "not-an-address"},
+            *({"dst": f"10.{index}.0.0/24"} for index in range(5)),
+        ]
+        with mock.patch.object(discovery, "_run_ip_json", return_value=routes):
+            networks = discovery.local_private_networks()
+        self.assertEqual(len(networks), discovery.MAX_NETWORKS)
+
+        connection = mock.MagicMock()
+        connection.__enter__.return_value = connection
+        with mock.patch.object(discovery.socket, "create_connection", return_value=connection):
+            self.assertTrue(discovery._tcp_open("192.168.1.2", 5006))
+        with mock.patch.object(discovery.socket, "create_connection", side_effect=OSError("closed")):
+            self.assertFalse(discovery._tcp_open("192.168.1.2", 5006))
 
     def test_management_host_does_not_claim_closed_default_webdav_port(self):
         result = discovery.ProbeResult(

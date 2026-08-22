@@ -107,6 +107,8 @@ def _run_ip_json(args: list[str]) -> list[dict]:
                 process.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 pass
+        if process is not None and process.stdout is not None:
+            process.stdout.close()
 
 
 def local_private_networks() -> list[ipaddress.IPv4Network]:

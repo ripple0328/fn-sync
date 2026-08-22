@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import io
 import json
 import os
@@ -176,6 +177,106 @@ class SecurityBoundsTests(unittest.TestCase):
         self.assertEqual(payload["distribution"], "plugin")
         self.assertEqual(payload["tasks"], [])
         self.assertEqual(payload["connections"], [])
+
+    def test_timeout_file_and_lock_boundaries_fail_closed(self):
+        result = fnsync.run_bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(2)"],
+            timeout=0.05,
+            stdout_limit=1024,
+            stderr_limit=1024,
+        )
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.returncode, 124)
+
+        invalid = self.root / "invalid-text"
+        invalid.write_bytes(b"\xff")
+        with self.assertRaisesRegex(fnsync.FnSyncError, "decode"):
+            fnsync.read_limited_text(invalid, 10)
+        with self.assertRaisesRegex(fnsync.FnSyncError, "non-regular"):
+            fnsync.read_limited_bytes(self.root, 10)
+
+        log = self.root / "bounded.log"
+        log.write_bytes(b"discard\n" + b"keep\n" * 100)
+        fnsync.trim_file_tail(log, 64)
+        self.assertLessEqual(log.stat().st_size, 64)
+        self.assertNotIn(b"discard", log.read_bytes())
+
+        lock = fnsync.runtime_paths()["locks"] / "unsafe.lock"
+        target = self.root / "outside-lock"
+        target.write_text("outside", encoding="utf-8")
+        lock.symlink_to(target)
+        with self.assertRaisesRegex(fnsync.FnSyncError, "lock file safely"):
+            fnsync.open_lock_file(lock)
+
+    def test_saved_schema_rejects_malformed_records_and_overlaps(self):
+        local = self.root / "sync"
+        local.mkdir()
+        connection = {
+            "id": "nas123",
+            "name": "NAS",
+            "url": "https://nas.example/",
+            "username": "alice",
+            "remote_name": "fnsync_nas_nas123",
+            "credential_backend": "rclone-obscured",
+            "secret_attribute": "connection",
+            "secret_id": "nas123",
+            "allow_http": False,
+            "insecure_skip_verify": False,
+        }
+        task = {
+            "id": "task123",
+            "name": "Task",
+            "connection_id": "nas123",
+            "enabled": False,
+            "mode": "upload-only",
+            "local_path": str(local),
+            "remote_path": "Sync",
+            "interval_seconds": 300,
+            "bwlimit": None,
+            "filters": [],
+            "initialized": True,
+        }
+        valid = {"version": 2, "connections": [connection], "tasks": [task]}
+        fnsync.validate_store_schema(valid)
+
+        malformed = [
+            None,
+            {"version": 1, "connections": [], "tasks": []},
+            {"version": 2, "connections": {}, "tasks": []},
+            {"version": 2, "connections": [None], "tasks": []},
+        ]
+        for store in malformed:
+            with self.subTest(store=store), self.assertRaises(fnsync.FnSyncError):
+                fnsync.validate_store_schema(store)
+
+        mutations = (
+            ("connection flag", lambda store: store["connections"][0].update(allow_http="yes")),
+            ("credential backend", lambda store: store["connections"][0].update(credential_backend="plain")),
+            ("task record", lambda store: store["tasks"].__setitem__(0, None)),
+            ("missing connection", lambda store: store["tasks"][0].update(connection_id="missing")),
+            ("task mode", lambda store: store["tasks"][0].update(mode="mirror-delete")),
+            ("task state", lambda store: store["tasks"][0].update(enabled="yes")),
+            ("interval", lambda store: store["tasks"][0].update(interval_seconds=True)),
+            ("bandwidth", lambda store: store["tasks"][0].update(bwlimit=100)),
+            ("filters", lambda store: store["tasks"][0].update(filters="not-a-list")),
+        )
+        for label, mutate in mutations:
+            store = copy.deepcopy(valid)
+            mutate(store)
+            with self.subTest(label=label), self.assertRaises(fnsync.FnSyncError):
+                fnsync.validate_store_schema(store)
+
+        duplicate_connection = copy.deepcopy(valid)
+        duplicate_connection["connections"].append(copy.deepcopy(connection))
+        with self.assertRaisesRegex(fnsync.FnSyncError, "duplicate IDs"):
+            fnsync.validate_store_schema(duplicate_connection)
+
+        nested = copy.deepcopy(valid)
+        second = copy.deepcopy(task)
+        second.update(id="task456", name="Nested", local_path=str(local / "nested"), remote_path="Other")
+        nested["tasks"].append(second)
+        with self.assertRaisesRegex(fnsync.FnSyncError, "overlapping local"):
+            fnsync.validate_store_schema(nested)
 
 
 if __name__ == "__main__":
