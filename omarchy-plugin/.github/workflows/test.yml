@@ -35,9 +35,9 @@ jobs:
 
       - name: Parse QML sources
         run: |
-          for qml in BarWidget.qml Panel.qml PanelPageHeader.qml FnSyncIcon.qml; do
+          for qml in BarWidget.qml Panel.qml PanelPageHeader.qml FnSyncIcon.qml PlainText.qml PlainTextAction.qml PlainTextDropdown.qml; do
             /usr/lib/qt6/bin/qmlformat "$qml" >/dev/null
           done
 
       - name: Lint shell wrapper
-        run: shellcheck scripts/fn-syncctl
+        run: shellcheck scripts/fn-syncctl controller/build-runtime.sh

@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import ipaddress
 import json
@@ -43,6 +44,60 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn('settings && settings.language || "system"', bar)
         self.assertIn('Quickshell.env("LC_ALL")', bar)
         self.assertIn('/^zh([_.-]|$)/i.test(systemLocale) ? "zh" : "en"', bar)
+
+    def test_controller_and_nas_text_is_always_rendered_as_plain_text(self):
+        plain_text = (ROOT / "PlainText.qml").read_text(encoding="utf-8")
+        panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+        header = (ROOT / "PanelPageHeader.qml").read_text(encoding="utf-8")
+        action = (ROOT / "PlainTextAction.qml").read_text(encoding="utf-8")
+        dropdown = (ROOT / "PlainTextDropdown.qml").read_text(encoding="utf-8")
+
+        self.assertIn("textFormat: Text.PlainText", plain_text)
+        self.assertNotRegex(panel, r"(?m)^\s*Text\s*\{")
+        self.assertNotRegex(header, r"(?m)^\s*Text\s*\{")
+        self.assertIn("PlainTextAction {", panel)
+        self.assertIn("PlainTextDropdown {", panel)
+        self.assertNotRegex(action, r"(?m)^\s*Text\s*\{")
+        self.assertNotRegex(dropdown, r"(?m)^\s*Text\s*\{")
+
+    def test_published_controller_source_and_provenance_are_auditable(self):
+        controller = ROOT / "controller" / "fnsync.py"
+        entrypoint = ROOT / "controller" / "entrypoint.py"
+        build_script = ROOT / "controller" / "build-runtime.sh"
+        build_requirements = ROOT / "controller" / "requirements-build.txt"
+        self.assertTrue(controller.is_file())
+        self.assertTrue(entrypoint.is_file())
+        self.assertTrue(build_script.is_file())
+        self.assertEqual(build_requirements.read_text(encoding="utf-8").strip(), "pyinstaller==6.22.0")
+        self.assertIn('--paths "$plugin_dir/controller"', build_script.read_text(encoding="utf-8"))
+
+        parent_controller = ROOT.parent / "src" / "fnsync.py"
+        parent_entrypoint = ROOT.parent / "scripts" / "fn-sync-plugin-runtime.py"
+        if parent_controller.is_file():
+            self.assertEqual(controller.read_bytes(), parent_controller.read_bytes())
+            self.assertEqual(entrypoint.read_bytes(), parent_entrypoint.read_bytes())
+            return
+
+        source_checkout_runtime = ROOT / "runtime" / "fnsync.py"
+        published_binaries = tuple((ROOT / "runtime" / "bin").glob("fn-sync-runtime-*"))
+        if source_checkout_runtime.is_file() and not published_binaries:
+            self.assertEqual(controller.read_bytes(), source_checkout_runtime.read_bytes())
+            return
+
+        provenance_path = ROOT / "BUILD-PROVENANCE.json"
+        self.assertTrue(provenance_path.is_file())
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        self.assertRegex(provenance["source_commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(provenance["attestation_repository"], "ripple0328/fn-sync")
+        for item in provenance["sources"] + provenance["artifacts"]:
+            path = ROOT / item["path"]
+            self.assertTrue(path.is_file(), path)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), item["sha256"])
+
+        checksums = (ROOT / "runtime" / "SHA256SUMS").read_text(encoding="utf-8")
+        for artifact in provenance["artifacts"]:
+            self.assertIn(artifact["sha256"], checksums)
+            self.assertIn(artifact["path"], checksums)
 
     def test_subpages_use_contextual_theme_native_navigation(self):
         panel = (ROOT / "Panel.qml").read_text(encoding="utf-8")

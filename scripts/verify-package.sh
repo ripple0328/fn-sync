@@ -33,6 +33,9 @@ for expected in \
   usr/share/fn-sync/omarchy-plugin/BarWidget.qml \
   usr/share/fn-sync/omarchy-plugin/Panel.qml \
   usr/share/fn-sync/omarchy-plugin/PanelPageHeader.qml \
+  usr/share/fn-sync/omarchy-plugin/PlainText.qml \
+  usr/share/fn-sync/omarchy-plugin/PlainTextAction.qml \
+  usr/share/fn-sync/omarchy-plugin/PlainTextDropdown.qml \
   usr/share/fn-sync/omarchy-plugin/README.md \
   usr/share/fn-sync/omarchy-plugin/README.zh-CN.md \
   usr/share/fn-sync/omarchy-plugin/LICENSE \

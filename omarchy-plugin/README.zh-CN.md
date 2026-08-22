@@ -63,7 +63,8 @@ omarchy plugin remove community.fnos-sync --yes
 
 插件使用 Omarchy 的 `Color`、`Style`、`BorderSurface`、
 `KeyboardPanel`、`Button`、`TextField`、`Dropdown` 和 `Toggle`
-组件，因此会自动跟随当前主题。
+组件，因此会自动跟随当前主题。来自控制器、NAS 和用户的动态字符串均通过显式的
+`Text.PlainText` 界面显示，不会被解释成 HTML、Markdown 或远程图片资源。
 
 ## 首次同步引导
 
@@ -103,6 +104,24 @@ FN sync 使用 fnOS 官方支持的 WebDAV 服务，支持多任务、三种同�
 过滤、只读检查、冲突副本、删除保护，以及限定在本机子网和已知端口的发现。
 FN ID 中继、跨子网发现、官方 token/2FA 授权和按需占位文件依赖官方客户端的
 私有 API，本项目不会模拟。
+
+## 审计内置控制器
+
+发布仓库在 [`controller/`](controller/) 中包含构建二进制时使用的完整控制器
+源码和构建入口。AMD64 与 ARM64 可执行文件分别在原生 Ubuntu 24.04 GitHub
+Actions 环境中，使用 Python 3.13 和 PyInstaller 6.22.0 从该目录构建。
+[`BUILD-PROVENANCE.json`](BUILD-PROVENANCE.json) 记录主源码提交、工作流运行、
+源码哈希和二进制哈希；GitHub 还会为每个二进制保存签名的 SLSA 构建来源证明。
+
+可使用以下命令验证下载内容：
+
+```bash
+sha256sum -c runtime/SHA256SUMS
+gh attestation verify runtime/bin/fn-sync-runtime-amd64 --repo ripple0328/fn-sync
+```
+
+AArch64 系统请改用 ARM64 文件名。本地构建方法和可复现范围说明见
+[`controller/README.md`](controller/README.md)。
 
 ## 开发
 

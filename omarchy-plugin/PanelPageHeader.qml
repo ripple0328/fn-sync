@@ -44,7 +44,7 @@ Column {
             anchors.centerIn: parent
             spacing: Style.spacing.xs
 
-            Text {
+            PlainText {
                 text: "←"
                 color: backLink.hot ? root.accent : root.dimForeground
                 font.family: root.fontFamily
@@ -52,7 +52,7 @@ Column {
                 font.bold: true
             }
 
-            Text {
+            PlainText {
                 text: root.parentTitle
                 color: backLink.hot ? root.accent : root.dimForeground
                 font.family: root.fontFamily
@@ -80,7 +80,7 @@ Column {
         }
     }
 
-    Text {
+    PlainText {
         width: parent.width
         text: root.title
         color: root.foreground
